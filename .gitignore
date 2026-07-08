@@ -1,0 +1,25 @@
+# Credenciales - NUNCA subir esto
+.env
+*.env
+!.env.example
+
+# Entorno virtual
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# PyInstaller
+build/
+dist/
+*.spec
+
+# Editor / SO
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
