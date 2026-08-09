@@ -27,7 +27,7 @@ Consiste en un formulario web estático (publicado en **GitHub Pages**) conectad
 
 ```
 ┌──────────────────────┐   HTTPS (fetch, JSON,   ┌──────────────────┐        JSON-RPC        ┌──────┐
-│  index.html            │   cookie de sesión)     │  backend_odoo.py │ ──────────────────────► │ Odoo │
+│  index.html            │   token en header)      │  backend_odoo.py │ ──────────────────────► │ Odoo │
 │  (GitHub Pages,        │ ───────────────────────► │  (Flask, en      │ ◄────────────────────── │      │
 │  estático, sin build)  │ ◄─────────────────────── │  Render)         │                          └──────┘
 └──────────────────────┘                           └──────────────────┘
@@ -37,10 +37,10 @@ Consiste en un formulario web estático (publicado en **GitHub Pages**) conectad
 ```
 
 - **`index.html`** — formulario standalone (HTML + CSS + JS, sin frameworks ni build step). Permite elegir tarjeta, subtarea, fecha, horas y descripción; muestra en vivo el historial real de esa subtarea en Odoo. No tiene ningún secreto embebido — solo la URL pública del backend. Se publica tal cual en GitHub Pages.
-- **`backend_odoo.py`** — API Flask (JSON puro) que hace de intermediaria con Odoo y gestiona el login propio de la app (usuario/contraseña, sesión por cookie, tabla `usuarios` en SQLite). Nunca se llama a Odoo directo desde el navegador (evita exponer el token de API). Se despliega en Render, separado del frontend.
+- **`backend_odoo.py`** — API Flask (JSON puro) que hace de intermediaria con Odoo y gestiona el login propio de la app (usuario/contraseña, token de sesión firmado, tabla `usuarios` en SQLite). Nunca se llama a Odoo directo desde el navegador (evita exponer el token de API). Se despliega en Render, separado del frontend.
 - **`crear_usuario.py`** — CLI para crear cuentas o resetear contraseñas en `usuarios.db`. Se corre del lado del backend desplegado (ver [Gestión de usuarios](#gestión-de-usuarios)).
 
-Como el frontend y el backend viven en dominios distintos (`*.github.io` vs `*.onrender.com`), la comunicación es cross-origin: el backend habilita CORS solo para el origen exacto del sitio de GitHub Pages, y la cookie de sesión usa `SameSite=None; Secure` para poder viajar entre ambos dominios por HTTPS.
+Como el frontend y el backend viven en dominios distintos (`*.github.io` vs `*.onrender.com`), la comunicación es cross-origin. La autenticación **no usa cookies**: muchos navegadores (Safari, Brave, Samsung Internet, y cada vez más) bloquean por defecto las cookies "de terceros" aunque tengan `SameSite=None; Secure`, lo que rompería el login. En cambio, `/api/login` devuelve un token firmado que el frontend guarda en `localStorage` y manda como header `Authorization: Bearer <token>` en cada pedido — no depende de ninguna política de cookies del navegador. El backend restringe CORS al origen exacto del sitio de GitHub Pages.
 
 ---
 
@@ -78,14 +78,9 @@ Esto levanta el backend en `http://127.0.0.1:5000`. En otra terminal, servir el 
 python -m http.server 5500
 ```
 
-Y abrir `http://127.0.0.1:5500/index.html`. Como ambos son `localhost` (mismo *site*, distinto puerto), alcanza con relajar la cookie en tu `.env` local:
+Y abrir `http://127.0.0.1:5500/index.html`. En `.env` local, `FRONTEND_ORIGINS` tiene que incluir `http://127.0.0.1:5500`.
 
-```
-COOKIE_SECURE=false
-COOKIE_SAMESITE=Lax
-```
-
-En `index.html`, cambiá temporalmente `API_BASE` a `http://127.0.0.1:5000` mientras desarrollás (y volvé a poner la URL de Render antes de publicar).
+En `js/app.js`, cambiá temporalmente `API_BASE` a `http://127.0.0.1:5000` mientras desarrollás (y volvé a poner la URL de Render antes de publicar).
 
 Cualquier cambio en `index.html` se ve recargando la pestaña; cambios en `backend_odoo.py` requieren reiniciar el script.
 
@@ -96,7 +91,7 @@ Cualquier cambio en `index.html` se ve recargando la pestaña; cambios en `backe
 1. Subí el repo a GitHub (puede ser privado, ver [Seguridad](#seguridad)).
 2. En Render: **New → Web Service**, conectá el repo.
 3. Build command: `pip install -r requirements.txt`. Start command: lo toma de [`Procfile`](Procfile) automáticamente (`gunicorn backend_odoo:app --bind 0.0.0.0:$PORT`); si no lo detecta, pegalo a mano en Start Command.
-4. Variables de entorno: cargá todas las de `.env.example` (`ODOO_URL`, `ODOO_DB`, `ODOO_UID`, `ODOO_TOKEN`, `SECRET_KEY`, `SESSION_LIFETIME_HORAS`, `FRONTEND_ORIGINS`, `COOKIE_SECURE=true`, `COOKIE_SAMESITE=None`, y las tres `BOOTSTRAP_ADMIN_*` — ver [Gestión de usuarios](#gestión-de-usuarios), las necesitás para poder loguearte la primera vez). `FRONTEND_ORIGINS` tiene que ser la URL exacta de tu sitio de GitHub Pages (la sabrás después del paso siguiente; se puede editar y volver a desplegar).
+4. Variables de entorno: cargá todas las de `.env.example` (`ODOO_URL`, `ODOO_DB`, `ODOO_UID`, `ODOO_TOKEN`, `SECRET_KEY`, `SESSION_LIFETIME_HORAS`, `FRONTEND_ORIGINS`, y las tres `BOOTSTRAP_ADMIN_*` — ver [Gestión de usuarios](#gestión-de-usuarios), las necesitás para poder loguearte la primera vez). `FRONTEND_ORIGINS` tiene que ser **el origen exacto** de tu sitio de GitHub Pages: solo protocolo + dominio (ej. `https://tu-usuario.github.io`), **sin** la ruta del repo ni barra final — el navegador manda el header `Origin` sin la ruta, así que si dejás la ruta puesta el CORS no va a matchear y el sitio va a quedar bloqueado. (La sabrás después del paso siguiente; se puede editar y volver a desplegar).
 5. Deploy. Render te da una URL tipo `https://tu-servicio.onrender.com` — copiala, la vas a necesitar en `index.html`.
 
 **Limitaciones del plan free de Render a tener en cuenta:**
@@ -200,7 +195,7 @@ subir_horas/
 - Si el token llegara a exponerse accidentalmente (capturas, commit erróneo, etc.), hay que **rotarlo** en Odoo lo antes posible.
 - `usuarios.db` guarda contraseñas **hasheadas** (`werkzeug.security`), nunca en texto plano — aun así, nunca se sube a git.
 - CORS en el backend está restringido a los orígenes listados en `FRONTEND_ORIGINS` (no `CORS(app)` abierto). Si en algún momento agregás otro dominio desde el que se sirva el frontend, hay que sumarlo ahí.
-- La cookie de sesión usa `SameSite=None; Secure`, o sea que **requiere HTTPS** en ambos extremos — no funciona si accedés al backend por `http://` en producción.
+- El login usa un **token firmado** (`itsdangerous`, con `SECRET_KEY`), no una cookie — se eligió así porque las cookies cross-site (`SameSite=None; Secure`) quedan bloqueadas por defecto en varios navegadores (Safari, Brave, Samsung Internet). El token vive en `localStorage` del navegador y viaja en el header `Authorization`. Expira solo a las `SESSION_LIFETIME_HORAS` de haberse emitido (no hay forma de invalidarlo antes de tiempo del lado del servidor — es la contra de no guardar estado de sesión; "cerrar sesión" simplemente lo borra del navegador). Si se filtra un token, expira solo; si hace falta invalidar algo antes, hay que rotar `SECRET_KEY` (invalida *todos* los tokens activos, no solo uno).
 - El sitio publicado en GitHub Pages es **público en internet** aunque el repositorio sea privado (ver nota en [Publicar el frontend](#publicar-el-frontend-en-github-pages)). El login es lo único que protege el acceso a los datos de horas.
 - El empleado de cada línea de horas se resuelve automáticamente según quién está **asignado a la subtarea** (`project.task.user_ids`), no según qué usuario de la app hizo el request. Esto permite, técnicamente, cargar horas "a nombre de" cualquier persona con tarjeta en el proyecto si sos admin — usar esa capacidad con criterio.
 
@@ -215,7 +210,8 @@ Por si en unos meses hay que recordar el "por qué":
 - **Empleado resuelto por tarea, no por sesión**: inicialmente se intentó resolver el campo Empleado a partir del usuario autenticado en la API. Es incorrecto — Odoo lo determina según quién está asignado a la subtarea específica (`user_ids` de `project.task`), independientemente de qué credencial hizo la llamada API.
 - **Filtro por tarjeta padre (`parent_id.name`) al buscar subtareas**: nombres de subtareas como "Carga de Horas" se repiten en las tarjetas de distintas personas dentro del mismo proyecto. Sin este filtro, la búsqueda podía devolver la subtarea de otra persona y cargar las horas en el lugar equivocado.
 - **Login propio en vez de credenciales de Odoo**: cada usuario de la app tiene su cuenta (usuario/contraseña + tarjeta asignada) en `usuarios.db`, separada de cualquier login de Odoo. Así no hace falta darle a cada persona un usuario de Odoo solo para cargar horas.
-- **Backend y frontend separados (Render + GitHub Pages) en vez de un solo proceso**: GitHub Pages no puede correr Flask; se necesitaba un servicio aparte para la lógica con estado (sesión, SQLite) y el secreto de Odoo. Esto obligó a que el login pase de páginas server-rendered a una API JSON pura, y a manejar cookies cross-site (`SameSite=None; Secure`) y CORS restringido por origen.
+- **Backend y frontend separados (Render + GitHub Pages) en vez de un solo proceso**: GitHub Pages no puede correr Flask; se necesitaba un servicio aparte para la lógica con estado (usuarios, SQLite) y el secreto de Odoo. Esto obligó a que el login pase de páginas server-rendered a una API JSON pura, con CORS restringido por origen.
+- **Token en `localStorage` en vez de cookie de sesión**: el primer intento usó la cookie de sesión de Flask con `SameSite=None; Secure`. Funcionaba en pruebas con curl y en Chrome de escritorio, pero fallaba silenciosamente en Samsung Internet (y falla igual en Safari/Brave) porque esos navegadores bloquean cookies cross-site por política propia, sin importar los atributos de la cookie. Se cambió a un token firmado (`itsdangerous`) devuelto en el JSON del login, guardado en `localStorage` y mandado como header `Authorization: Bearer` — no depende de ninguna política de cookies.
 - **Sin app de escritorio**: la versión anterior se distribuía como `.exe` (pywebview + PyInstaller). Se descartó en favor de un sitio web accesible desde cualquier navegador, sin instalar nada.
 
 ---
@@ -231,11 +227,11 @@ Revisar que `buscar_tarea_id()` esté filtrando por `parent_id.name` correctamen
 **Error de campo inexistente al crear el registro**
 Correr `GET /api/campos?modelo=<modelo>&q=<palabra>` (como admin) para confirmar el nombre técnico real del campo en esta instancia (varios campos están personalizados vía Odoo Studio, ej. `x_studio_*`).
 
-**El navegador bloquea las llamadas al backend (error de CORS)**
-`FRONTEND_ORIGINS` en el backend no incluye el origen exacto desde el que estás sirviendo `index.html` (protocolo + dominio, sin barra final). Revisar variables de entorno en Render y volver a desplegar.
+**El navegador bloquea las llamadas al backend (error de CORS) / la página queda en negro**
+`FRONTEND_ORIGINS` en el backend no incluye el origen exacto desde el que estás sirviendo `index.html`: tiene que ser **solo protocolo + dominio** (ej. `https://tu-usuario.github.io`), sin la ruta del repo (`/subir_horas`) ni barra final — el navegador manda el header `Origin` sin la ruta, así que si la dejás puesta no matchea nunca. Revisar en Render → Environment y volver a desplegar. (Si la página queda completamente en blanco/negro sin mostrar ni el login, confirmá que estás en la versión más reciente de `js/app.js` — versiones viejas no manejaban este error y se quedaban sin mostrar nada).
 
 **Me loguea bien pero después cada request da 401 ("no autenticado")**
-Casi siempre es la cookie de sesión que no está viajando: confirmar que `index.html` usa `credentials: 'include'` en los `fetch` (ya lo trae por defecto vía la función `api()`), que el backend tiene `COOKIE_SECURE=true` y `COOKIE_SAMESITE=None`, y que estás accediendo a todo por HTTPS (no HTTP) en producción.
+El token puede haber expirado (dura `SESSION_LIFETIME_HORAS`, default 8) — volvé a loguearte. Si pasa inmediatamente después de loguearte, revisá en las herramientas de desarrollador (Network) que el pedido a `/api/whoami` esté mandando el header `Authorization: Bearer ...` — si no lo manda, puede ser que `localStorage` esté deshabilitado o bloqueado (modo incógnito estricto, alguna extensión).
 
 **No puedo loguearme después de un redeploy del backend**
-Esperado en el plan free de Render: `usuarios.db` se resetea en cada redeploy. Volvé a correr `crear_usuario.py` desde la Shell de Render (ver [Gestión de usuarios](#gestión-de-usuarios)).
+Esperado en el plan free de Render: `usuarios.db` se resetea en cada redeploy. Si tenés `BOOTSTRAP_ADMIN_*` cargadas en Render, ese admin se recrea solo — esperá el redeploy y reintentá. Si no las tenés, corré `crear_usuario.py` (ver [Gestión de usuarios](#gestión-de-usuarios)).

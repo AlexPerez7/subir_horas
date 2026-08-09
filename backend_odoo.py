@@ -2,14 +2,21 @@
 Backend Flask (API JSON pura) que habla con Odoo y gestiona el login
 propio de la app. Se despliega aparte del frontend (que vive como
 sitio estatico en GitHub Pages) - por eso todo acá es JSON, nada de
-paginas server-rendered, y CORS/cookies estan configurados para
-funcionar cross-origin.
+paginas server-rendered.
 
-Autenticacion por sesion web (login propio). Cada usuario esta
-asociado a una tarjeta especifica de Odoo (definida al crear su
-cuenta con crear_usuario.py) - el backend nunca confia en una
-"tarjeta" que venga del navegador para usuarios normales, salvo que
-la cuenta sea de administrador.
+Autenticacion por token, no por cookie de sesion: el login devuelve un
+token firmado que el frontend guarda (localStorage) y manda en el
+header "Authorization: Bearer <token>" en cada pedido. Se eligio este
+esquema en vez de cookies porque frontend (GitHub Pages) y backend
+(Render) viven en dominios distintos, y varios navegadores (Safari,
+Brave, Samsung Internet, y cada vez mas) bloquean por defecto las
+cookies "de terceros" aunque tengan SameSite=None; Secure - un token
+en un header no depende de ninguna politica de cookies.
+
+Cada usuario esta asociado a una tarjeta especifica de Odoo (definida
+al crear su cuenta) - el backend nunca confia en una "tarjeta" que
+venga del navegador para usuarios normales, salvo que la cuenta sea de
+administrador.
 
 Instalar dependencias:
     pip install -r requirements.txt
@@ -21,12 +28,10 @@ Variables de entorno esperadas (.env, NUNCA subir a git; ver .env.example):
     ODOO_UID=429
     ODOO_TOKEN=xxxxxxxxxxxxxxxx
 
-    SECRET_KEY=<cadena larga y aleatoria, para firmar las cookies de sesion>
-    SESSION_LIFETIME_HORAS=8   (opcional, default 8)
+    SECRET_KEY=<cadena larga y aleatoria, para firmar los tokens>
+    SESSION_LIFETIME_HORAS=8   (opcional, default 8 - vigencia del token)
 
     FRONTEND_ORIGINS=https://tu-usuario.github.io   (lista separada por comas)
-    COOKIE_SECURE=true    (poner "false" solo en desarrollo local sin HTTPS)
-    COOKIE_SAMESITE=None  (poner "Lax" en desarrollo local, ver README)
 """
 
 import os
@@ -34,8 +39,9 @@ import sqlite3
 from datetime import date, timedelta
 
 import requests
-from flask import Flask, request, jsonify, session
+from flask import Flask, request, jsonify, g
 from flask_cors import CORS
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from werkzeug.security import check_password_hash, generate_password_hash
 from dotenv import load_dotenv
 
@@ -51,24 +57,13 @@ ODOO_TOKEN = os.environ["ODOO_TOKEN"]
 DB_PATH = os.path.join(_CARPETA, "usuarios.db")
 
 FRONTEND_ORIGINS = [o.strip() for o in os.environ.get("FRONTEND_ORIGINS", "").split(",") if o.strip()]
+TOKEN_LIFETIME_SEGUNDOS = int(os.environ.get("SESSION_LIFETIME_HORAS", 8)) * 3600
 
 app = Flask(__name__, static_folder=None)
 app.secret_key = os.environ["SECRET_KEY"]
-CORS(app, supports_credentials=True, origins=FRONTEND_ORIGINS)
+CORS(app, origins=FRONTEND_ORIGINS, allow_headers=["Content-Type", "Authorization"])
 
-# Expiración de sesión por inactividad: cada request "renueva" el
-# contador (comportamiento por defecto de Flask), así que esto
-# equivale a "cerrar sesión sola tras X horas sin actividad".
-app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=int(os.environ.get("SESSION_LIFETIME_HORAS", 8)))
-
-# En producción (frontend en GitHub Pages, backend en Render) la
-# cookie viaja cross-site: necesita SameSite=None + Secure=True. En
-# desarrollo local (frontend y backend en localhost, distinto
-# puerto) son "same-site" así que alcanza con Lax/no-Secure - ver
-# README, sección "Modo desarrollo".
-app.config["SESSION_COOKIE_SECURE"] = os.environ.get("COOKIE_SECURE", "true").strip().lower() != "false"
-app.config["SESSION_COOKIE_SAMESITE"] = os.environ.get("COOKIE_SAMESITE", "None")
-app.config["SESSION_COOKIE_HTTPONLY"] = True
+_serializer = URLSafeTimedSerializer(app.secret_key, salt="registro-horas-token")
 
 PROJECT_NAME = "GER_Produccion Varios NF"
 
@@ -110,8 +105,8 @@ def actualizar_password(username, nuevo_hash):
 
 
 def requiere_admin():
-    """Devuelve una respuesta 403 si la sesión actual no es de administrador, o None si puede seguir."""
-    if not session.get("es_admin"):
+    """Devuelve una respuesta 403 si el usuario actual no es administrador, o None si puede seguir."""
+    if not g.usuario.get("es_admin"):
         return jsonify({"error": "solo administradores"}), 403
     return None
 
@@ -147,10 +142,25 @@ _bootstrap_admin()
 
 
 # --------------------------------------------------------------------
-# Autenticación por sesión (todo JSON - el frontend es una SPA aparte)
+# Autenticación por token (todo JSON - el frontend es una SPA aparte)
 # --------------------------------------------------------------------
 
-RUTAS_PUBLICAS = ("/", "/api/login", "/api/logout")
+def generar_token(usuario):
+    return _serializer.dumps({
+        "username": usuario["username"],
+        "tarjeta": usuario["tarjeta"],
+        "es_admin": bool(usuario["es_admin"]),
+    })
+
+
+def decodificar_token(token):
+    try:
+        return _serializer.loads(token, max_age=TOKEN_LIFETIME_SEGUNDOS)
+    except (BadSignature, SignatureExpired):
+        return None
+
+
+RUTAS_PUBLICAS = ("/", "/api/login")
 
 
 @app.before_request
@@ -159,8 +169,13 @@ def proteger_todo():
         return  # preflight CORS
     if request.path in RUTAS_PUBLICAS:
         return
-    if "username" not in session:
+
+    auth = request.headers.get("Authorization", "")
+    token = auth[len("Bearer "):] if auth.startswith("Bearer ") else None
+    usuario = decodificar_token(token) if token else None
+    if not usuario:
         return jsonify({"error": "no autenticado"}), 401
+    g.usuario = usuario
 
 
 @app.route("/")
@@ -178,22 +193,13 @@ def login():
     if not usuario or not check_password_hash(usuario["password_hash"], password):
         return jsonify({"error": "Usuario o contraseña incorrectos."}), 401
 
-    session.permanent = True  # activa PERMANENT_SESSION_LIFETIME (expira tras inactividad)
-    session["username"] = usuario["username"]
-    session["tarjeta"] = usuario["tarjeta"]
-    session["es_admin"] = bool(usuario["es_admin"])
     return jsonify({
         "ok": True,
+        "token": generar_token(usuario),
         "username": usuario["username"],
         "tarjeta": usuario["tarjeta"],
         "es_admin": bool(usuario["es_admin"]),
     })
-
-
-@app.route("/api/logout", methods=["POST"])
-def logout():
-    session.clear()
-    return jsonify({"ok": True})
 
 
 @app.route("/api/cambiar-password", methods=["POST"])
@@ -203,7 +209,7 @@ def cambiar_password():
     nueva = data.get("nueva", "")
     confirmar = data.get("confirmar", "")
 
-    usuario = obtener_usuario(session["username"])
+    usuario = obtener_usuario(g.usuario["username"])
     if not check_password_hash(usuario["password_hash"], actual):
         return jsonify({"error": "La contraseña actual no es correcta."}), 400
     if len(nueva) < 6:
@@ -211,16 +217,16 @@ def cambiar_password():
     if nueva != confirmar:
         return jsonify({"error": "Las contraseñas nuevas no coinciden."}), 400
 
-    actualizar_password(session["username"], generate_password_hash(nueva))
+    actualizar_password(g.usuario["username"], generate_password_hash(nueva))
     return jsonify({"ok": True})
 
 
 @app.route("/api/whoami", methods=["GET"])
 def whoami():
     return jsonify({
-        "username": session.get("username"),
-        "tarjeta": session.get("tarjeta"),
-        "es_admin": session.get("es_admin", False),
+        "username": g.usuario.get("username"),
+        "tarjeta": g.usuario.get("tarjeta"),
+        "es_admin": g.usuario.get("es_admin", False),
     })
 
 
@@ -295,7 +301,7 @@ def borrar_usuario(username):
         return error
 
     username = username.strip().lower()
-    if username == session["username"]:
+    if username == g.usuario["username"]:
         return jsonify({"error": "no podés eliminar tu propio usuario"}), 400
 
     con = sqlite3.connect(DB_PATH)
@@ -383,8 +389,8 @@ def obtener_employee_de_tarea(task_id):
 
 
 def tarjeta_de_la_request(data_o_args):
-    tarjeta_sesion = session["tarjeta"]
-    if session.get("es_admin"):
+    tarjeta_sesion = g.usuario["tarjeta"]
+    if g.usuario.get("es_admin"):
         tarjeta_pedida = data_o_args.get("tarjeta")
         if tarjeta_pedida:
             return tarjeta_pedida
@@ -417,8 +423,8 @@ def dias_habiles_atras(n, desde=None):
 
 @app.route("/api/tarjetas", methods=["GET"])
 def listar_tarjetas():
-    if not session.get("es_admin"):
-        return jsonify([{"id": None, "name": session["tarjeta"]}])
+    if not g.usuario.get("es_admin"):
+        return jsonify([{"id": None, "name": g.usuario["tarjeta"]}])
     project_ids = obtener_project_ids()
     tarjetas = odoo_execute_kw(
         "project.task", "search_read",
@@ -448,7 +454,7 @@ def listar_subtareas():
 
 @app.route("/api/campos", methods=["GET"])
 def listar_campos():
-    if not session.get("es_admin"):
+    if not g.usuario.get("es_admin"):
         return jsonify({"error": "solo administradores"}), 403
     modelo = request.args.get("modelo", "account.analytic.line")
     campos = odoo_execute_kw(modelo, "fields_get", [], {"attributes": ["string", "type"]})
@@ -567,7 +573,7 @@ def recordatorio():
     Avisa si el último día hábil no tiene ninguna hora registrada,
     para la tarjeta del usuario en sesión.
     """
-    tarjeta = session["tarjeta"]
+    tarjeta = g.usuario["tarjeta"]
     fecha_revisar = dia_habil_anterior(date.today())
 
     task_ids = subtareas_ids_de_tarjeta(tarjeta)

@@ -1,20 +1,40 @@
 const API_BASE = 'https://subir-horas.onrender.com';
+const TOKEN_KEY = 'registro_horas_token';
 let ES_ADMIN = false;
 
 document.getElementById('fecha').valueAsDate = new Date();
 document.getElementById('fechaConsulta').valueAsDate = new Date();
 
+// Autenticación por token (no por cookie): frontend y backend viven en
+// dominios distintos, y varios navegadores (Safari, Brave, Samsung
+// Internet...) bloquean por defecto las cookies cross-site aunque
+// tengan SameSite=None; Secure. Guardamos el token en localStorage y
+// lo mandamos como header en cada pedido en vez de depender de cookies.
+function getToken(){ return localStorage.getItem(TOKEN_KEY); }
+function setToken(token){ localStorage.setItem(TOKEN_KEY, token); }
+function clearToken(){ localStorage.removeItem(TOKEN_KEY); }
+
 function api(path, options){
-  return fetch(API_BASE + path, Object.assign({ credentials: 'include' }, options));
+  options = options || {};
+  const headers = Object.assign({}, options.headers);
+  const token = getToken();
+  if(token) headers['Authorization'] = 'Bearer ' + token;
+  return fetch(API_BASE + path, Object.assign({}, options, { headers }));
 }
 
 async function inicializar(){
+  if(!getToken()){
+    document.getElementById('appRoot').style.display = 'none';
+    document.getElementById('loginBox').style.display = 'block';
+    return;
+  }
+
   let res;
   try{
     res = await api('/api/whoami');
   } catch(e){
-    // Backend caído, dormido (Render free) o bloqueado por CORS: mostramos
-    // el login igual, con el motivo, en vez de dejar la página en blanco.
+    // Backend caído o dormido (Render free): mostramos el login igual,
+    // con el motivo, en vez de dejar la página en blanco.
     document.getElementById('appRoot').style.display = 'none';
     document.getElementById('loginBox').style.display = 'block';
     const statusEl = document.getElementById('loginStatus');
@@ -23,6 +43,7 @@ async function inicializar(){
     return;
   }
   if(res.status === 401){
+    clearToken();
     document.getElementById('appRoot').style.display = 'none';
     document.getElementById('loginBox').style.display = 'block';
     return;
@@ -85,6 +106,7 @@ async function iniciarSesion(){
       statusEl.textContent = data.error || 'No se pudo ingresar.';
       return;
     }
+    setToken(data.token);
     document.getElementById('loginPassword').value = '';
     inicializar();
   } catch(e){
@@ -95,8 +117,11 @@ async function iniciarSesion(){
   }
 }
 
-async function cerrarSesion(){
-  try{ await api('/api/logout', { method: 'POST' }); } catch(e){ /* seguimos igual */ }
+function cerrarSesion(){
+  // Token sin estado del lado del servidor: "cerrar sesión" es
+  // simplemente olvidarlo acá. Expira solo de todas formas (ver
+  // SESSION_LIFETIME_HORAS en el backend).
+  clearToken();
   document.getElementById('appRoot').style.display = 'none';
   document.getElementById('loginBox').style.display = 'block';
   document.getElementById('loginUsername').value = '';

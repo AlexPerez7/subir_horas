@@ -1,5 +1,6 @@
 flask
 flask-cors
+itsdangerous
 python-dotenv
 requests
 werkzeug
