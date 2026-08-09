@@ -96,12 +96,13 @@ Cualquier cambio en `index.html` se ve recargando la pestaña; cambios en `backe
 1. Subí el repo a GitHub (puede ser privado, ver [Seguridad](#seguridad)).
 2. En Render: **New → Web Service**, conectá el repo.
 3. Build command: `pip install -r requirements.txt`. Start command: lo toma de [`Procfile`](Procfile) automáticamente (`gunicorn backend_odoo:app --bind 0.0.0.0:$PORT`); si no lo detecta, pegalo a mano en Start Command.
-4. Variables de entorno: cargá todas las de `.env.example` (`ODOO_URL`, `ODOO_DB`, `ODOO_UID`, `ODOO_TOKEN`, `SECRET_KEY`, `SESSION_LIFETIME_HORAS`, `FRONTEND_ORIGINS`, `COOKIE_SECURE=true`, `COOKIE_SAMESITE=None`). `FRONTEND_ORIGINS` tiene que ser la URL exacta de tu sitio de GitHub Pages (la sabrás después del paso siguiente; se puede editar y volver a desplegar).
+4. Variables de entorno: cargá todas las de `.env.example` (`ODOO_URL`, `ODOO_DB`, `ODOO_UID`, `ODOO_TOKEN`, `SECRET_KEY`, `SESSION_LIFETIME_HORAS`, `FRONTEND_ORIGINS`, `COOKIE_SECURE=true`, `COOKIE_SAMESITE=None`, y las tres `BOOTSTRAP_ADMIN_*` — ver [Gestión de usuarios](#gestión-de-usuarios), las necesitás para poder loguearte la primera vez). `FRONTEND_ORIGINS` tiene que ser la URL exacta de tu sitio de GitHub Pages (la sabrás después del paso siguiente; se puede editar y volver a desplegar).
 5. Deploy. Render te da una URL tipo `https://tu-servicio.onrender.com` — copiala, la vas a necesitar en `index.html`.
 
 **Limitaciones del plan free de Render a tener en cuenta:**
 - El servicio "duerme" tras ~15 minutos sin tráfico; el primer request después de eso tarda unos segundos en responder (arranque en frío). Normal para un uso personal.
 - El disco es **efímero**: `usuarios.db` se recrea vacía en cada redeploy del backend. Ver [Gestión de usuarios](#gestión-de-usuarios).
+- **No incluye acceso a Shell** (eso es del plan pago Starter en adelante), así que no se puede correr `crear_usuario.py` a mano ahí — el bootstrap del primer admin se resuelve con variables de entorno, no con la Shell (ver más abajo).
 
 ---
 
@@ -128,18 +129,26 @@ Si tu cuenta es admin, al loguearte ves una sección **Usuarios** con:
 
 Por detrás usa los endpoints `GET/POST /api/usuarios`, `POST /api/usuarios/<user>/resetear-password` y `DELETE /api/usuarios/<user>` — todos devuelven 403 si la sesión no es admin. Un admin no puede eliminarse a sí mismo (para no quedarse afuera por accidente).
 
-### Bootstrap: el primer admin, por CLI
+### Bootstrap: el primer admin
 
-El panel necesita que ya exista al menos un admin logueado — para crear ese primero (o si perdés acceso a todos los admins) se usa [`crear_usuario.py`](crear_usuario.py):
+El panel necesita que ya exista al menos un admin logueado. En el plan free de Render **no hay Shell** para correr comandos a mano (es una función paga desde el plan Starter), así que el primer admin se crea con tres variables de entorno:
+
+```
+BOOTSTRAP_ADMIN_USERNAME=tu-usuario
+BOOTSTRAP_ADMIN_PASSWORD=una-contraseña-inicial
+BOOTSTRAP_ADMIN_TARJETA=Alex Perez
+```
+
+Al arrancar, `backend_odoo.py` se fija si ya existe un usuario con ese `username`; si no existe, lo crea como admin con esa contraseña y tarjeta. Si ya existe, no hace nada — no pisa una contraseña que hayas cambiado después desde el panel. Cargalas en Render (**Environment**) y esperá el redeploy; con eso ya podés loguearte en el sitio de GitHub Pages y usar el panel **Usuarios** para todo lo demás.
+
+**Dejalas cargadas en Render permanentemente** (no las borres después del primer login): como el disco de Render free es efímero, `usuarios.db` se resetea en cada redeploy del backend — estas tres variables son justamente la red de seguridad que recrea ese admin automáticamente cada vez que hace falta, sin que tengas que hacer nada manual. Ojo con un detalle: si cambiás la contraseña de `BOOTSTRAP_ADMIN_USERNAME` desde el panel y **después** hay un redeploy, al recrearse el usuario vuelve a la contraseña que esté en `BOOTSTRAP_ADMIN_PASSWORD` en Render (no la que hayas cambiado) — si querés que el cambio sea permanente, actualizá también la variable de entorno.
+
+Si en algún momento corrés esto localmente o en un host con Shell disponible, [`crear_usuario.py`](crear_usuario.py) sigue siendo una alternativa por línea de comandos:
 
 ```powershell
 python crear_usuario.py <username> "<Nombre exacto de la tarjeta en Odoo>" --admin
 python crear_usuario.py <username> --reset-password
 ```
-
-La contraseña se pide de forma oculta por consola (mínimo 6 caracteres).
-
-**Importante:** en el plan free de Render `usuarios.db` vive en el disco efímero del servicio, no en tu máquina. Tanto el panel como este script (para el primer admin) operan sobre esa base — si necesitás correr el script, hacelo **desde la pestaña "Shell" del servicio en Render** (no localmente). Como el disco es efímero, `usuarios.db` se resetea en cada redeploy del backend, así que después de todo redeploy hay que volver a crear el primer admin con este script antes de poder usar el panel. Para un puñado de personas es un trámite de un minuto; si se vuelve molesto, la solución de fondo es pasar a un plan con disco persistente (Render) o migrar a Fly.io (que sí tiene volúmenes persistentes en su capa gratuita).
 
 ---
 

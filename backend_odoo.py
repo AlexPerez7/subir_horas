@@ -91,9 +91,6 @@ def _inicializar_db():
     con.close()
 
 
-_inicializar_db()
-
-
 def obtener_usuario(username):
     con = sqlite3.connect(DB_PATH)
     con.row_factory = sqlite3.Row
@@ -117,6 +114,36 @@ def requiere_admin():
     if not session.get("es_admin"):
         return jsonify({"error": "solo administradores"}), 403
     return None
+
+
+def _bootstrap_admin():
+    """
+    Crea un admin desde variables de entorno si todavía no existe (y no
+    toca nada si ya existe). Pensado para plataformas sin acceso a
+    Shell en el plan gratuito (ej. Render): en vez de correr
+    crear_usuario.py a mano, el propio backend se auto-crea el primer
+    admin al arrancar. Opcional: si no están las tres variables, no
+    hace nada.
+    """
+    admin_user = os.environ.get("BOOTSTRAP_ADMIN_USERNAME", "").strip().lower()
+    admin_pass = os.environ.get("BOOTSTRAP_ADMIN_PASSWORD", "")
+    admin_tarjeta = os.environ.get("BOOTSTRAP_ADMIN_TARJETA", "").strip()
+    if not (admin_user and admin_pass and admin_tarjeta):
+        return
+    if obtener_usuario(admin_user):
+        return
+
+    con = sqlite3.connect(DB_PATH)
+    con.execute(
+        "INSERT INTO usuarios (username, password_hash, tarjeta, es_admin) VALUES (?, ?, ?, 1)",
+        (admin_user, generate_password_hash(admin_pass), admin_tarjeta),
+    )
+    con.commit()
+    con.close()
+
+
+_inicializar_db()
+_bootstrap_admin()
 
 
 # --------------------------------------------------------------------
