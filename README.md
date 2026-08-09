@@ -118,17 +118,28 @@ Cualquier cambio en `index.html` se ve recargando la pestaña; cambios en `backe
 
 ## Gestión de usuarios
 
-No hay una pantalla de "crear cuenta" — se administra por línea de comandos con [`crear_usuario.py`](crear_usuario.py):
+**No hay registro abierto a propósito**: cualquiera con el link de GitHub Pages podría crearse una cuenta y elegir a qué tarjeta de Odoo cargarle horas si el alta fuera pública. En cambio, hay un panel de administración dentro de la propia app.
+
+### Día a día: panel "Usuarios" (dentro de la app)
+
+Si tu cuenta es admin, al loguearte ves una sección **Usuarios** con:
+- Listado de usuarios existentes (tarjeta asignada, si es admin), con botones para **resetear contraseña** (🔑) o **eliminar** (🗑).
+- Formulario para crear un usuario nuevo: usuario, tarjeta (elegís de la misma lista que ve el selector principal), contraseña inicial, y un checkbox "Es administrador".
+
+Por detrás usa los endpoints `GET/POST /api/usuarios`, `POST /api/usuarios/<user>/resetear-password` y `DELETE /api/usuarios/<user>` — todos devuelven 403 si la sesión no es admin. Un admin no puede eliminarse a sí mismo (para no quedarse afuera por accidente).
+
+### Bootstrap: el primer admin, por CLI
+
+El panel necesita que ya exista al menos un admin logueado — para crear ese primero (o si perdés acceso a todos los admins) se usa [`crear_usuario.py`](crear_usuario.py):
 
 ```powershell
-python crear_usuario.py <username> "<Nombre exacto de la tarjeta en Odoo>" [--admin]
+python crear_usuario.py <username> "<Nombre exacto de la tarjeta en Odoo>" --admin
 python crear_usuario.py <username> --reset-password
 ```
 
-- `--admin` marca al usuario como administrador (puede operar sobre cualquier tarjeta, no solo la propia; ver `/api/campos`).
-- La contraseña se pide de forma oculta por consola (mínimo 6 caracteres).
+La contraseña se pide de forma oculta por consola (mínimo 6 caracteres).
 
-**Importante:** en el plan free de Render `usuarios.db` vive en el disco efímero del servicio, no en tu máquina. Este script hay que correrlo **desde la pestaña "Shell" del servicio en Render** (no localmente), y hay que volver a correrlo para cada usuario después de todo redeploy del backend. Para un puñado de personas es un trámite de un minuto; si se vuelve molesto, la solución de fondo es pasar a un plan con disco persistente (Render) o migrar a Fly.io (que sí tiene volúmenes persistentes en su capa gratuita).
+**Importante:** en el plan free de Render `usuarios.db` vive en el disco efímero del servicio, no en tu máquina. Tanto el panel como este script (para el primer admin) operan sobre esa base — si necesitás correr el script, hacelo **desde la pestaña "Shell" del servicio en Render** (no localmente). Como el disco es efímero, `usuarios.db` se resetea en cada redeploy del backend, así que después de todo redeploy hay que volver a crear el primer admin con este script antes de poder usar el panel. Para un puñado de personas es un trámite de un minuto; si se vuelve molesto, la solución de fondo es pasar a un plan con disco persistente (Render) o migrar a Fly.io (que sí tiene volúmenes persistentes en su capa gratuita).
 
 ---
 

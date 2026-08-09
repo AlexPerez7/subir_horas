@@ -116,6 +116,32 @@
     <div id="listaFaltantes" style="margin-top:14px;"></div>
   </div>
 
+  <div class="card" id="panelUsuarios" style="margin-top:20px; display:none;">
+    <h2>Usuarios</h2>
+    <table>
+      <thead>
+        <tr><th>Usuario</th><th>Tarjeta</th><th style="width:60px">Admin</th><th style="width:90px"></th></tr>
+      </thead>
+      <tbody id="tbodyUsuarios">
+        <tr><td colspan="4" class="empty">Cargando...</td></tr>
+      </tbody>
+    </table>
+
+    <h2 style="margin-top:22px;">Crear usuario nuevo</h2>
+    <label for="nuevoUsuarioNombre">Usuario</label>
+    <input type="text" id="nuevoUsuarioNombre" autocomplete="off">
+    <label for="nuevoUsuarioTarjeta">Tarjeta en Odoo</label>
+    <select id="nuevoUsuarioTarjeta"><option>Cargando...</option></select>
+    <label for="nuevoUsuarioPassword">Contraseña inicial</label>
+    <input type="password" id="nuevoUsuarioPassword" autocomplete="new-password">
+    <label style="display:flex; align-items:center; gap:8px; margin-top:14px; cursor:pointer;">
+      <input type="checkbox" id="nuevoUsuarioAdmin" style="width:auto;">
+      Es administrador
+    </label>
+    <button class="primary" onclick="crearUsuarioNuevo()">Crear usuario</button>
+    <div class="status" id="usuariosStatus"></div>
+  </div>
+
   <div class="note">
     <b>Conectado a Odoo vía backend propio</b>, desplegado aparte de este sitio estático. Cada "Registrar" crea de inmediato la línea real en <code>account.analytic.line</code>. El empleado se resuelve automáticamente según quién está asignado a la subtarea elegida — no según quién corre este formulario.
   </div>

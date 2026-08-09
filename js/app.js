@@ -30,7 +30,9 @@ async function inicializar(){
     document.getElementById('labelTarjeta').style.display = '';
     document.getElementById('tarjeta').style.display = '';
     document.getElementById('tarjetaFija').style.display = 'none';
+    document.getElementById('panelUsuarios').style.display = 'block';
     cargarTarjetas();
+    cargarUsuarios();
   } else {
     document.getElementById('labelTarjeta').style.display = 'none';
     document.getElementById('tarjeta').style.display = 'none';
@@ -171,11 +173,113 @@ async function cargarTarjetas(){
   try{
     const res = await api('/api/tarjetas');
     const tarjetas = await res.json();
-    sel.innerHTML = tarjetas.map(t => `<option value="${t.name}">${t.name}</option>`).join('');
+    const opciones = tarjetas.map(t => `<option value="${t.name}">${t.name}</option>`).join('');
+    sel.innerHTML = opciones;
+    const selNuevoUsuario = document.getElementById('nuevoUsuarioTarjeta');
+    if(selNuevoUsuario) selNuevoUsuario.innerHTML = opciones;
     cargarSubtareas();
   } catch(e){
     sel.innerHTML = '<option>Error cargando tarjetas</option>';
     mostrarStatus('No se pudo conectar al backend (' + e.message + '). ¿Está corriendo backend_odoo.py?', 'err');
+  }
+}
+
+async function cargarUsuarios(){
+  const tbody = document.getElementById('tbodyUsuarios');
+  try{
+    const res = await api('/api/usuarios');
+    const usuarios = await res.json();
+    if(usuarios.length === 0){
+      tbody.innerHTML = '<tr><td colspan="4" class="empty">Sin usuarios todavía.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = usuarios.map(u => `
+      <tr>
+        <td class="desc">${u.username}</td>
+        <td class="desc">${u.tarjeta}</td>
+        <td>${u.es_admin ? '<span class="tag">admin</span>' : ''}</td>
+        <td style="white-space:nowrap;">
+          <button type="button" class="del" onclick="resetearPasswordUsuario('${u.username}')" title="Resetear contraseña">🔑</button>
+          <button type="button" class="del" onclick="eliminarUsuarioAdmin('${u.username}')" title="Eliminar">🗑</button>
+        </td>
+      </tr>`).join('');
+  } catch(e){
+    tbody.innerHTML = '<tr><td colspan="4" class="empty">Error cargando usuarios.</td></tr>';
+  }
+}
+
+async function crearUsuarioNuevo(){
+  const username = document.getElementById('nuevoUsuarioNombre').value.trim();
+  const tarjeta = document.getElementById('nuevoUsuarioTarjeta').value;
+  const password = document.getElementById('nuevoUsuarioPassword').value;
+  const esAdmin = document.getElementById('nuevoUsuarioAdmin').checked;
+  const statusEl = document.getElementById('usuariosStatus');
+
+  if(!username || !password){
+    statusEl.className = 'status err';
+    statusEl.textContent = 'Completa usuario y contraseña.';
+    return;
+  }
+
+  statusEl.className = 'status';
+  statusEl.textContent = 'Creando...';
+
+  try{
+    const res = await api('/api/usuarios', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({username, tarjeta, password, es_admin: esAdmin})
+    });
+    const data = await res.json();
+    if(!res.ok || data.error){
+      statusEl.className = 'status err';
+      statusEl.textContent = data.error || 'No se pudo crear el usuario.';
+      return;
+    }
+    statusEl.className = 'status ok';
+    statusEl.textContent = 'Usuario creado.';
+    document.getElementById('nuevoUsuarioNombre').value = '';
+    document.getElementById('nuevoUsuarioPassword').value = '';
+    document.getElementById('nuevoUsuarioAdmin').checked = false;
+    cargarUsuarios();
+  } catch(e){
+    statusEl.className = 'status err';
+    statusEl.textContent = 'No se pudo conectar al backend: ' + e.message;
+  }
+}
+
+async function resetearPasswordUsuario(username){
+  const nueva = prompt('Nueva contraseña para "' + username + '" (mínimo 6 caracteres):');
+  if(!nueva) return;
+  try{
+    const res = await api('/api/usuarios/' + encodeURIComponent(username) + '/resetear-password', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({nueva})
+    });
+    const data = await res.json();
+    if(!res.ok || data.error){
+      alert('Error: ' + (data.error || res.statusText));
+      return;
+    }
+    alert('Contraseña actualizada.');
+  } catch(e){
+    alert('No se pudo conectar al backend: ' + e.message);
+  }
+}
+
+async function eliminarUsuarioAdmin(username){
+  if(!confirm('¿Eliminar el usuario "' + username + '"? Esta acción no se puede deshacer.')) return;
+  try{
+    const res = await api('/api/usuarios/' + encodeURIComponent(username), { method: 'DELETE' });
+    const data = await res.json();
+    if(!res.ok || data.error){
+      alert('Error: ' + (data.error || res.statusText));
+      return;
+    }
+    cargarUsuarios();
+  } catch(e){
+    alert('No se pudo conectar al backend: ' + e.message);
   }
 }
 

@@ -112,6 +112,13 @@ def actualizar_password(username, nuevo_hash):
     con.close()
 
 
+def requiere_admin():
+    """Devuelve una respuesta 403 si la sesión actual no es de administrador, o None si puede seguir."""
+    if not session.get("es_admin"):
+        return jsonify({"error": "solo administradores"}), 403
+    return None
+
+
 # --------------------------------------------------------------------
 # Autenticación por sesión (todo JSON - el frontend es una SPA aparte)
 # --------------------------------------------------------------------
@@ -188,6 +195,89 @@ def whoami():
         "tarjeta": session.get("tarjeta"),
         "es_admin": session.get("es_admin", False),
     })
+
+
+# --------------------------------------------------------------------
+# Gestión de usuarios (solo administradores)
+# --------------------------------------------------------------------
+
+@app.route("/api/usuarios", methods=["GET"])
+def listar_usuarios():
+    error = requiere_admin()
+    if error:
+        return error
+    con = sqlite3.connect(DB_PATH)
+    con.row_factory = sqlite3.Row
+    filas = con.execute("SELECT username, tarjeta, es_admin FROM usuarios ORDER BY username").fetchall()
+    con.close()
+    return jsonify([dict(f) for f in filas])
+
+
+@app.route("/api/usuarios", methods=["POST"])
+def crear_usuario_api():
+    error = requiere_admin()
+    if error:
+        return error
+
+    data = request.get_json(silent=True) or {}
+    username = data.get("username", "").strip().lower()
+    tarjeta = data.get("tarjeta", "").strip()
+    password = data.get("password", "")
+    es_admin_nuevo = bool(data.get("es_admin"))
+
+    if not username or not tarjeta:
+        return jsonify({"error": "faltan usuario o tarjeta"}), 400
+    if len(password) < 6:
+        return jsonify({"error": "la contraseña debe tener al menos 6 caracteres"}), 400
+    if obtener_usuario(username):
+        return jsonify({"error": f"ya existe el usuario '{username}'"}), 409
+
+    con = sqlite3.connect(DB_PATH)
+    con.execute(
+        "INSERT INTO usuarios (username, password_hash, tarjeta, es_admin) VALUES (?, ?, ?, ?)",
+        (username, generate_password_hash(password), tarjeta, int(es_admin_nuevo)),
+    )
+    con.commit()
+    con.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/usuarios/<username>/resetear-password", methods=["POST"])
+def resetear_password_usuario(username):
+    error = requiere_admin()
+    if error:
+        return error
+
+    username = username.strip().lower()
+    data = request.get_json(silent=True) or {}
+    nueva = data.get("nueva", "")
+
+    if len(nueva) < 6:
+        return jsonify({"error": "la contraseña debe tener al menos 6 caracteres"}), 400
+    if not obtener_usuario(username):
+        return jsonify({"error": f"no existe el usuario '{username}'"}), 404
+
+    actualizar_password(username, generate_password_hash(nueva))
+    return jsonify({"ok": True})
+
+
+@app.route("/api/usuarios/<username>", methods=["DELETE"])
+def borrar_usuario(username):
+    error = requiere_admin()
+    if error:
+        return error
+
+    username = username.strip().lower()
+    if username == session["username"]:
+        return jsonify({"error": "no podés eliminar tu propio usuario"}), 400
+
+    con = sqlite3.connect(DB_PATH)
+    cur = con.execute("DELETE FROM usuarios WHERE username = ?", (username,))
+    con.commit()
+    con.close()
+    if not cur.rowcount:
+        return jsonify({"error": f"no existe el usuario '{username}'"}), 404
+    return jsonify({"ok": True})
 
 
 # --------------------------------------------------------------------
