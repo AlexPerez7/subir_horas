@@ -1,5 +1,4 @@
-// Reemplaza esto con la URL real del backend una vez desplegado en Render.
-const API_BASE = 'https://TU-BACKEND.onrender.com';
+const API_BASE = 'https://subir-horas.onrender.com';
 let ES_ADMIN = false;
 
 document.getElementById('fecha').valueAsDate = new Date();
