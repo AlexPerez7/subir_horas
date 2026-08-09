@@ -667,6 +667,19 @@ def editar_timesheet(line_id):
 
 @app.route("/api/timesheet/<int:line_id>", methods=["DELETE"])
 def borrar_timesheet(line_id):
+    tarjeta = tarjeta_de_la_request(request.args)
+
+    # Verificar que la línea pertenece a la tarjeta del usuario antes de borrarla
+    task_ids_tarjeta = subtareas_ids_de_tarjeta(tarjeta)
+    linea_actual = odoo_execute_kw(
+        "account.analytic.line", "read",
+        [[line_id]], {"fields": ["task_id"]},
+    )
+    if not linea_actual:
+        return jsonify({"error": "no existe esa línea"}), 404
+    if linea_actual[0]["task_id"][0] not in task_ids_tarjeta:
+        return jsonify({"error": "esa línea no pertenece a tu tarjeta"}), 403
+
     ok = odoo_execute_kw("account.analytic.line", "unlink", [[line_id]])
     return jsonify({"ok": ok})
 

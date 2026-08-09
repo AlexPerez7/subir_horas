@@ -437,7 +437,7 @@ async function registrarEnOdoo(){
 async function deshacer(id){
   mostrarStatus('Deshaciendo...');
   try{
-    const res = await api('/api/timesheet/' + id, { method: 'DELETE' });
+    const res = await api('/api/timesheet/' + id + '?tarjeta=' + encodeURIComponent(tarjetaActual()), { method: 'DELETE' });
     const data = await res.json();
     if(data.ok){
       mostrarStatus('Entrada eliminada.', 'ok');
@@ -512,8 +512,26 @@ function renderTablaDia(){
       <td><span class="tag">${l.subtarea}</span></td>
       <td class="hrs">${l.horas.toFixed(2)}h</td>
       <td class="desc">${l.descripcion || '—'}</td>
-      <td><button type="button" class="del" style="color:var(--text-dim);" onclick="activarEdicion(${l.id})" title="Editar">✎</button></td>
+      <td style="white-space:nowrap;">
+        <button type="button" class="del" style="color:var(--text-dim);" onclick="activarEdicion(${l.id})" title="Editar">✎</button>
+        <button type="button" class="del" onclick="eliminarLineaDia(${l.id})" title="Eliminar">🗑</button>
+      </td>
     </tr>`).join('');
+}
+
+async function eliminarLineaDia(id){
+  if(!confirm('¿Eliminar esta entrada? Esta acción no se puede deshacer.')) return;
+  try{
+    const res = await api('/api/timesheet/' + id + '?tarjeta=' + encodeURIComponent(tarjetaActual()), { method: 'DELETE' });
+    const data = await res.json();
+    if(!res.ok || data.error){
+      alert('Error al eliminar: ' + (data.error || res.statusText));
+      return;
+    }
+    consultarDia();
+  } catch(e){
+    alert('No se pudo conectar al backend: ' + e.message);
+  }
 }
 
 async function activarEdicion(id){
