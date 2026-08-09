@@ -9,7 +9,19 @@ function api(path, options){
 }
 
 async function inicializar(){
-  const res = await api('/api/whoami');
+  let res;
+  try{
+    res = await api('/api/whoami');
+  } catch(e){
+    // Backend caído, dormido (Render free) o bloqueado por CORS: mostramos
+    // el login igual, con el motivo, en vez de dejar la página en blanco.
+    document.getElementById('appRoot').style.display = 'none';
+    document.getElementById('loginBox').style.display = 'block';
+    const statusEl = document.getElementById('loginStatus');
+    statusEl.className = 'status err';
+    statusEl.textContent = 'No se pudo conectar al backend (' + e.message + '). Puede estar "despertando" (Render free) - probá reintentar en unos segundos.';
+    return;
+  }
   if(res.status === 401){
     document.getElementById('appRoot').style.display = 'none';
     document.getElementById('loginBox').style.display = 'block';
