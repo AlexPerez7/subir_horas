@@ -2,6 +2,7 @@
 .env
 *.env
 !.env.example
+usuarios.db
 
 # Entorno virtual
 .venv/
@@ -12,11 +13,6 @@ env/
 __pycache__/
 *.pyc
 *.pyo
-
-# PyInstaller
-build/
-dist/
-*.spec
 
 # Editor / SO
 .vscode/

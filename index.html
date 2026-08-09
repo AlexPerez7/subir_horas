@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Registro de horas · Odoo</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="loginBox" class="login-wrap" style="display:none;">
+  <span class="eyebrow">GER_Produccion Varios NF</span>
+  <h1>Registro de horas</h1>
+  <div class="card" style="margin-top:20px;">
+    <label for="loginUsername">Usuario</label>
+    <input type="text" id="loginUsername" autocomplete="username">
+    <label for="loginPassword">Contraseña</label>
+    <input type="password" id="loginPassword" autocomplete="current-password">
+    <button class="primary" id="btnLogin" onclick="iniciarSesion()">Ingresar</button>
+    <div class="status" id="loginStatus"></div>
+  </div>
+</div>
+
+<div id="appRoot" style="display:none;">
+<div class="wrap">
+  <header>
+    <div>
+      <span class="eyebrow">GER_Produccion Varios NF</span>
+      <h1>Registro de horas</h1>
+    </div>
+    <div class="userbox" id="userbox"></div>
+  </header>
+
+  <div id="banner" style="display:none; background:#2E2410; border:1px solid #6B5115; color:#F5C563; font-size:13px; padding:12px 16px; border-radius:8px; margin-bottom:20px;"></div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Nueva entrada</h2>
+
+      <label for="tarjeta" id="labelTarjeta">Tarjeta / Persona</label>
+      <select id="tarjeta"><option>Cargando...</option></select>
+      <div id="tarjetaFija" style="display:none; font-family:var(--mono); font-size:13.5px; padding:9px 10px; background:var(--surface-2); border:1px solid var(--border); border-radius:6px;"></div>
+
+      <label for="subtarea">Subtarea</label>
+      <select id="subtarea" disabled><option>Selecciona una tarjeta primero</option></select>
+
+      <div class="row2">
+        <div>
+          <label for="fecha">Fecha</label>
+          <input type="date" id="fecha">
+          <div class="chips">
+            <button type="button" class="chip" onclick="setFecha(0)">Hoy</button>
+            <button type="button" class="chip" onclick="setFecha(-1)">Ayer</button>
+          </div>
+        </div>
+        <div>
+          <label for="horas">Horas</label>
+          <input type="number" id="horas" step="0.25" min="0.25" placeholder="1.5">
+        </div>
+      </div>
+
+      <label for="detalle">Descripción</label>
+      <textarea id="detalle" placeholder="Ej: revisión de logs de conectores CDE, rotación de credenciales..."></textarea>
+      <div class="chips" id="chipsDescripcion"></div>
+
+      <button class="primary" id="btnRegistrar" onclick="registrarEnOdoo()">Registrar en Odoo</button>
+      <button class="ghost" onclick="exportarCSV()">Exportar CSV (respaldo local)</button>
+      <div class="status" id="status"></div>
+    </div>
+
+    <div class="card">
+      <h2>En Odoo · <span id="subtareaActual">—</span> <span class="hud" id="totalSubtarea" style="float:right"></span></h2>
+      <table>
+        <thead>
+          <tr><th style="width:16%">Fecha</th><th style="width:12%">Horas</th><th>Descripción</th></tr>
+        </thead>
+        <tbody id="tbodyOdoo">
+          <tr><td colspan="3" class="empty">Elige una subtarea para ver su historial.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:20px;">
+    <h2>Ver día completo</h2>
+    <div class="row2" style="align-items:end;">
+      <div>
+        <label for="fechaConsulta">Fecha a consultar</label>
+        <input type="date" id="fechaConsulta">
+      </div>
+      <div>
+        <button class="primary" style="margin-top:0;" onclick="consultarDia()">Ver horas de ese día</button>
+      </div>
+    </div>
+    <table style="margin-top:16px;">
+      <thead>
+        <tr><th style="width:26%">Subtarea</th><th style="width:12%">Horas</th><th>Descripción</th><th style="width:70px"></th></tr>
+      </thead>
+      <tbody id="tbodyDia">
+        <tr><td colspan="4" class="empty">Elige una fecha y presiona "Ver horas de ese día".</td></tr>
+      </tbody>
+    </table>
+    <div class="status" id="totalDia" style="margin-top:10px;"></div>
+  </div>
+
+  <div class="card" style="margin-top:20px;">
+    <h2>Días sin cargar horas</h2>
+    <div class="row2" style="align-items:end;">
+      <div>
+        <label for="cantidadDias">Revisar últimos N días hábiles</label>
+        <input type="number" id="cantidadDias" value="10" min="1" max="60">
+      </div>
+      <div>
+        <button class="primary" style="margin-top:0;" onclick="revisarDiasFaltantes()">Revisar</button>
+      </div>
+    </div>
+    <div id="listaFaltantes" style="margin-top:14px;"></div>
+  </div>
+
+  <div class="note">
+    <b>Conectado a Odoo vía backend propio</b>, desplegado aparte de este sitio estático. Cada "Registrar" crea de inmediato la línea real en <code>account.analytic.line</code>. El empleado se resuelve automáticamente según quién está asignado a la subtarea elegida — no según quién corre este formulario.
+  </div>
+</div>
+</div>
+
+<div id="cambiarPasswordBackdrop" class="modal-backdrop" style="display:none;">
+  <div class="modal">
+    <h2>Cambiar contraseña</h2>
+    <label for="cpActual">Contraseña actual</label>
+    <input type="password" id="cpActual">
+    <label for="cpNueva">Contraseña nueva</label>
+    <input type="password" id="cpNueva">
+    <label for="cpConfirmar">Confirmar contraseña nueva</label>
+    <input type="password" id="cpConfirmar">
+    <button class="primary" onclick="guardarCambioPassword()">Guardar</button>
+    <button class="ghost" onclick="toggleCambiarPassword(false)">Cancelar</button>
+    <div class="status" id="cpStatus"></div>
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+</body>
+</html>
