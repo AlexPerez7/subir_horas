@@ -1,6 +1,7 @@
 const API_BASE = 'https://subir-horas.onrender.com';
 const TOKEN_KEY = 'registro_horas_token';
 let ES_ADMIN = false;
+let MI_TARJETA = '';
 
 document.getElementById('fecha').valueAsDate = new Date();
 document.getElementById('fechaConsulta').valueAsDate = new Date();
@@ -50,6 +51,7 @@ async function inicializar(){
   }
   const yo = await res.json();
   ES_ADMIN = !!yo.es_admin;
+  MI_TARJETA = yo.tarjeta;
 
   document.getElementById('loginBox').style.display = 'none';
   document.getElementById('appRoot').style.display = 'block';
@@ -212,6 +214,12 @@ async function cargarTarjetas(){
     const tarjetas = await res.json();
     const opciones = tarjetas.map(t => `<option value="${t.name}">${t.name}</option>`).join('');
     sel.innerHTML = opciones;
+    // Como admin, el desplegable trae todas las tarjetas del proyecto:
+    // preseleccionamos la propia en vez de dejar que quede la primera
+    // de la lista (que es de quien sea que Odoo devuelva primero).
+    if(MI_TARJETA && tarjetas.some(t => t.name === MI_TARJETA)){
+      sel.value = MI_TARJETA;
+    }
     const selNuevoUsuario = document.getElementById('nuevoUsuarioTarjeta');
     if(selNuevoUsuario) selNuevoUsuario.innerHTML = opciones;
     cargarSubtareas();
