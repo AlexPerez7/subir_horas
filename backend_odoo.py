@@ -44,6 +44,7 @@ Variables de entorno esperadas (.env, NUNCA subir a git; ver .env.example):
 import os
 import sqlite3
 import time
+import unicodedata
 from datetime import date, datetime, timedelta
 
 import requests
@@ -808,10 +809,22 @@ def telegram_enviar_mensaje(texto):
         pass  # el peor caso es que no llegue el mensaje, no vale la pena reintentar acá
 
 
-def _responder_pregunta_telegram(texto, tarjeta):
-    texto = texto.lower().strip()
+def _quitar_acentos(texto):
+    return "".join(c for c in unicodedata.normalize("NFKD", texto) if not unicodedata.combining(c))
 
-    if any(p in texto for p in ("falta", "faltan", "faltaron", "sin cargar", "sin subir")):
+
+def _responder_pregunta_telegram(texto, tarjeta):
+    # Sin acentos y en minúscula, así "¿Qué días no he subido horas?" y
+    # "que dias no subi horas" matchean igual - no vale la pena pedirle
+    # precisión de tipeo a un chat.
+    texto = _quitar_acentos(texto.lower().strip())
+
+    disparadores_faltantes = (
+        "falta", "sin cargar", "sin subir", "sin horas",
+        "no he subido", "no subi", "no cargue", "no cargu", "no cargado",
+        "dias sin", "que dias", "que dia",
+    )
+    if any(p in texto for p in disparadores_faltantes):
         dias = dias_habiles_atras(10)
         task_ids = subtareas_ids_de_tarjeta(tarjeta)
         if not task_ids:
@@ -830,7 +843,7 @@ def _responder_pregunta_telegram(texto, tarjeta):
         listado = "\n".join("- " + d.strftime("%d/%m") for d in faltantes)
         return f"📋 Días hábiles sin horas cargadas (últimos 10):\n{listado}"
 
-    if any(p in texto for p in ("resum", "semana", "mes", "cuant", "cuánt", "llevo")):
+    if any(p in texto for p in ("resum", "semana", "mes", "cuant", "llevo", "total")):
         r = _calcular_resumen(tarjeta)
         detalle = "\n".join(f"- {s['subtarea']}: {s['horas']:.1f}h" for s in r["por_subtarea"])
         detalle = detalle or "(sin horas cargadas esta semana)"
