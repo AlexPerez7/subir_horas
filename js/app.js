@@ -60,6 +60,7 @@ async function inicializar(){
 
   document.getElementById('loginBox').style.display = 'none';
   document.getElementById('appRoot').style.display = 'block';
+  iniciarMonitoreoBackend();
 
   document.getElementById('userbox').innerHTML =
     '<b>' + yo.username + '</b> · ' + yo.tarjeta +
@@ -84,6 +85,39 @@ async function inicializar(){
 
   verificarRecordatorio();
   cargarResumen();
+}
+
+let _intervaloBackend = null;
+let _timeoutDespertando = null;
+
+function _setEstadoBackend(clase, texto, titulo){
+  const el = document.getElementById('estadoBackend');
+  el.className = 'estado-backend ' + clase;
+  el.innerHTML = '<span class="punto"></span>' + texto;
+  if(titulo) el.title = titulo; else el.removeAttribute('title');
+}
+
+async function verificarBackend(){
+  clearTimeout(_timeoutDespertando);
+  _setEstadoBackend('estado-conectando', 'Conectando...');
+  _timeoutDespertando = setTimeout(() => {
+    _setEstadoBackend('estado-conectando', 'Despertando servidor...', 'El backend gratuito (Render) duerme tras 15 min sin uso y puede tardar hasta un minuto en responder.');
+  }, 3000);
+
+  try{
+    const res = await api('/');
+    clearTimeout(_timeoutDespertando);
+    _setEstadoBackend(res.ok ? 'estado-ok' : 'estado-error', res.ok ? 'Conectado' : 'Sin conexión', res.ok ? '' : 'El backend respondió con error ' + res.status + '.');
+  } catch(e){
+    clearTimeout(_timeoutDespertando);
+    _setEstadoBackend('estado-error', 'Sin conexión', e.message);
+  }
+}
+
+function iniciarMonitoreoBackend(){
+  verificarBackend();
+  if(_intervaloBackend) return;
+  _intervaloBackend = setInterval(verificarBackend, 45000);
 }
 
 async function cargarResumen(){

@@ -26,6 +26,13 @@ header .eyebrow{ font-family:var(--mono); font-size:11px; color:var(--accent); t
 .userbox a{ color:var(--accent); text-decoration:none; margin-left:10px; cursor:pointer; }
 .userbox a:hover{ text-decoration:underline; }
 
+.estado-backend{ display:inline-flex; align-items:center; gap:5px; font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:.5px; color:var(--text-dim); }
+.estado-backend .punto{ width:7px; height:7px; border-radius:50%; background:var(--text-dim); }
+.estado-backend.estado-ok .punto{ background:var(--ok); }
+.estado-backend.estado-conectando .punto{ background:#F5C563; animation:parpadeo 1.4s ease-in-out infinite; }
+.estado-backend.estado-error .punto{ background:var(--err); }
+@keyframes parpadeo{ 0%,100%{ opacity:1; } 50%{ opacity:.35; } }
+
 .resumen{ display:flex; gap:12px; margin-bottom:20px; }
 .resumen-item{ flex:1; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px 16px; }
 .resumen-valor{ display:block; font-family:var(--mono); font-size:21px; font-weight:600; color:var(--accent); }
