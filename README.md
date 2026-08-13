@@ -192,6 +192,31 @@ En el repo: **Settings → Secrets and variables → Actions → New repository 
 
 Pestaña **Actions → Recordatorio de horas por Telegram → Run workflow** (y lo mismo para **Resumen semanal de horas por Telegram**). Si los tres secrets están bien cargados, el job debería pasar en verde. Mientras no los cargues, estos workflows van a fallar — es el comportamiento esperado hasta terminar de configurarlos, no un bug.
 
+### Bot interactivo: preguntarle cosas al bot
+
+Además de los avisos automáticos, le podés escribir directo al bot en Telegram cosas como **"¿qué días no he subido horas?"** o **"resumen de esta semana"** y te contesta con datos reales de Odoo. Esto es distinto de los workflows de arriba: en vez de un job periódico que empuja un mensaje, es un **webhook** — Telegram le pega un `POST` a tu backend en Render cada vez que le escribís, y el backend responde en el momento (`POST /api/telegram-webhook` en [`backend_odoo.py`](backend_odoo.py)).
+
+**1. Variables de entorno en Render**
+
+Además de `CRON_SECRET`, cargá en Render (no en GitHub — estas las usa el backend, no un workflow):
+- `TELEGRAM_BOT_TOKEN` — el mismo token de BotFather.
+- `TELEGRAM_CHAT_ID` — el mismo id que sacaste antes.
+- `TELEGRAM_WEBHOOK_SECRET` — una cadena aleatoria nueva (generarla igual que `SECRET_KEY`). Es el mecanismo con el que el backend verifica que el `POST` realmente viene de Telegram y no de cualquiera que le pegue a la URL.
+
+**2. Registrar el webhook en Telegram (una sola vez)**
+
+Con tu token real y la URL de tu backend en Render:
+```powershell
+curl -X POST "https://api.telegram.org/bot<TOKEN>/setWebhook" `
+  -d url="https://tu-servicio.onrender.com/api/telegram-webhook" `
+  -d secret_token="<TELEGRAM_WEBHOOK_SECRET>"
+```
+Debería responder `{"ok":true,"result":true,...}`. A partir de ahí, cualquier mensaje que le mandes al bot dispara el webhook automáticamente — no hace falta volver a correr esto salvo que cambies de URL de Render o quieras rotar el secreto.
+
+**3. Probar**
+
+Escribile al bot "resumen" o "¿qué días no he subido horas?" desde Telegram. Si el backend estaba dormido (Render free), la primera respuesta puede tardar hasta un minuto en llegar (arranque en frío) — es normal. El bot solo responde a mensajes que vengan de `TELEGRAM_CHAT_ID`; si alguien más le escribe (por ejemplo si el username del bot se filtra), el backend los ignora en silencio.
+
 ---
 
 ## Gestión de usuarios
@@ -288,6 +313,7 @@ subir_horas/
 - Si el token llegara a exponerse accidentalmente (capturas, commit erróneo, etc.), hay que **rotarlo** en Odoo lo antes posible.
 - `usuarios.db` guarda contraseñas **hasheadas** (`werkzeug.security`), nunca en texto plano — aun así, nunca se sube a git.
 - CORS en el backend está restringido a los orígenes listados en `FRONTEND_ORIGINS` (no `CORS(app)` abierto). Si en algún momento agregás otro dominio desde el que se sirva el frontend, hay que sumarlo ahí.
+- El webhook del bot de Telegram (`POST /api/telegram-webhook`) valida el header `X-Telegram-Bot-Api-Secret-Token` contra `TELEGRAM_WEBHOOK_SECRET` y además ignora cualquier mensaje que no venga de `TELEGRAM_CHAT_ID` — sin eso, cualquiera que encontrara el username del bot podría preguntarle tus horas.
 - El login se bloquea 5 minutos para un usuario tras 5 intentos fallidos seguidos (mitiga fuerza bruta básica). El contador vive en memoria del proceso — se resetea en cada redeploy, y solo funciona porque el `Procfile` corre un único worker de gunicorn (si en algún momento se agregan más workers, este esquema necesitaría un store compartido tipo Redis).
 - El login usa un **token firmado** (`itsdangerous`, con `SECRET_KEY`), no una cookie — se eligió así porque las cookies cross-site (`SameSite=None; Secure`) quedan bloqueadas por defecto en varios navegadores (Safari, Brave, Samsung Internet). El token vive en `localStorage` del navegador y viaja en el header `Authorization`. Expira solo a las `SESSION_LIFETIME_HORAS` de haberse emitido (no hay forma de invalidarlo antes de tiempo del lado del servidor — es la contra de no guardar estado de sesión; "cerrar sesión" simplemente lo borra del navegador). Si se filtra un token, expira solo; si hace falta invalidar algo antes, hay que rotar `SECRET_KEY` (invalida *todos* los tokens activos, no solo uno).
 - El sitio publicado en GitHub Pages es **público en internet** aunque el repositorio sea privado (ver nota en [Publicar el frontend](#publicar-el-frontend-en-github-pages)). El login es lo único que protege el acceso a los datos de horas.

@@ -35,6 +35,10 @@ Variables de entorno esperadas (.env, NUNCA subir a git; ver .env.example):
 
     CRON_SECRET=<cadena aleatoria>   (opcional - habilita /api/recordatorio-cron
         para el recordatorio automático por Telegram; ver README)
+
+    TELEGRAM_BOT_TOKEN=<token de @BotFather>       (opcional - habilita el
+    TELEGRAM_CHAT_ID=<tu chat id>                   bot interactivo de
+    TELEGRAM_WEBHOOK_SECRET=<cadena aleatoria>      Telegram; ver README)
 """
 
 import os
@@ -63,6 +67,10 @@ DB_PATH = os.path.join(_CARPETA, "usuarios.db")
 FRONTEND_ORIGINS = [o.strip() for o in os.environ.get("FRONTEND_ORIGINS", "").split(",") if o.strip()]
 TOKEN_LIFETIME_SEGUNDOS = int(os.environ.get("SESSION_LIFETIME_HORAS", 8)) * 3600
 CRON_SECRET = os.environ.get("CRON_SECRET", "")
+
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+TELEGRAM_WEBHOOK_SECRET = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "")
 
 app = Flask(__name__, static_folder=None)
 app.secret_key = os.environ["SECRET_KEY"]
@@ -190,7 +198,7 @@ def decodificar_token(token):
         return None
 
 
-RUTAS_PUBLICAS = ("/", "/api/login", "/api/recordatorio-cron", "/api/resumen-semanal-cron")
+RUTAS_PUBLICAS = ("/", "/api/login", "/api/recordatorio-cron", "/api/resumen-semanal-cron", "/api/telegram-webhook")
 
 
 @app.before_request
@@ -772,6 +780,103 @@ def resumen_semanal_cron():
         return jsonify({"error": "no hay BOOTSTRAP_ADMIN_TARJETA configurada"}), 500
 
     return jsonify(_calcular_resumen(tarjeta))
+
+
+# --------------------------------------------------------------------
+# Bot interactivo de Telegram
+# --------------------------------------------------------------------
+#
+# A diferencia de los dos endpoints -cron de arriba (empujan un mensaje
+# por un job periódico de GitHub Actions), esto es un webhook: Telegram
+# le pega un POST a esta URL cada vez que alguien le escribe al bot
+# (configurado una única vez con el método setWebhook de la Bot API,
+# ver README). No usa sesión de la app ni CRON_SECRET - se protege con
+# el secret_token propio de Telegram (header X-Telegram-Bot-Api-Secret-
+# Token) más un chequeo de que el chat sea el tuyo (TELEGRAM_CHAT_ID),
+# para que nadie más pueda hacerle preguntas al bot y ver tus horas.
+
+def telegram_enviar_mensaje(texto):
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        return
+    try:
+        requests.post(
+            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+            json={"chat_id": TELEGRAM_CHAT_ID, "text": texto},
+            timeout=10,
+        )
+    except requests.RequestException:
+        pass  # el peor caso es que no llegue el mensaje, no vale la pena reintentar acá
+
+
+def _responder_pregunta_telegram(texto, tarjeta):
+    texto = texto.lower().strip()
+
+    if any(p in texto for p in ("falta", "faltan", "faltaron", "sin cargar", "sin subir")):
+        dias = dias_habiles_atras(10)
+        task_ids = subtareas_ids_de_tarjeta(tarjeta)
+        if not task_ids:
+            return "No encontré subtareas para tu tarjeta."
+        fecha_min = min(dias).isoformat()
+        fecha_max = max(dias).isoformat()
+        lineas = odoo_execute_kw(
+            "account.analytic.line", "search_read",
+            [[["task_id", "in", task_ids], ["date", ">=", fecha_min], ["date", "<=", fecha_max]]],
+            {"fields": ["date"]},
+        )
+        con_horas = {l["date"] for l in lineas}
+        faltantes = sorted(d for d in dias if d.isoformat() not in con_horas)
+        if not faltantes:
+            return "✅ No te falta cargar ningún día hábil de los últimos 10."
+        listado = "\n".join("- " + d.strftime("%d/%m") for d in faltantes)
+        return f"📋 Días hábiles sin horas cargadas (últimos 10):\n{listado}"
+
+    if any(p in texto for p in ("resum", "semana", "mes", "cuant", "cuánt", "llevo")):
+        r = _calcular_resumen(tarjeta)
+        detalle = "\n".join(f"- {s['subtarea']}: {s['horas']:.1f}h" for s in r["por_subtarea"])
+        detalle = detalle or "(sin horas cargadas esta semana)"
+        return f"📊 Esta semana: {r['semana']:.1f}h · Este mes: {r['mes']:.1f}h\n\n{detalle}"
+
+    return (
+        "No entendí la pregunta. Puedo ayudarte con:\n"
+        "- \"¿qué días no he subido horas?\" → días hábiles sin cargar (últimos 10)\n"
+        "- \"resumen\" o \"¿cuántas horas llevo esta semana?\" → resumen semanal/mensual"
+    )
+
+
+@app.route("/api/telegram-webhook", methods=["POST"])
+def telegram_webhook():
+    if not TELEGRAM_WEBHOOK_SECRET or request.headers.get("X-Telegram-Bot-Api-Secret-Token") != TELEGRAM_WEBHOOK_SECRET:
+        return jsonify({"error": "no encontrado"}), 404
+
+    update = request.get_json(silent=True) or {}
+    mensaje = update.get("message") or update.get("edited_message") or {}
+    texto = (mensaje.get("text") or "").strip()
+    chat_id = str((mensaje.get("chat") or {}).get("id", ""))
+
+    # Siempre 200: Telegram reintenta con backoff si no le contestamos
+    # 2xx, y no queremos reintentos por mensajes que decidimos ignorar.
+    if not texto or not TELEGRAM_CHAT_ID or chat_id != TELEGRAM_CHAT_ID:
+        return jsonify({"ok": True})
+
+    tarjeta = os.environ.get("BOOTSTRAP_ADMIN_TARJETA", "").strip()
+    if not tarjeta:
+        telegram_enviar_mensaje("No hay BOOTSTRAP_ADMIN_TARJETA configurada en el servidor.")
+        return jsonify({"ok": True})
+
+    if texto.startswith("/start") or texto.lower() in ("ayuda", "help", "/help"):
+        respuesta = (
+            "Hola 👋 Puedo contestarte cosas como:\n"
+            "- \"¿qué días no he subido horas?\"\n"
+            "- \"resumen de esta semana\""
+        )
+    else:
+        try:
+            respuesta = _responder_pregunta_telegram(texto, tarjeta)
+        except Exception as e:
+            respuesta = f"Tuve un error consultando Odoo: {e}"
+
+    telegram_enviar_mensaje(respuesta)
+    return jsonify({"ok": True})
 
 
 @app.route("/api/dias-cargados", methods=["GET"])
