@@ -98,6 +98,7 @@ button.ghost{
 }
 button.ghost:hover{ color:var(--text); border-color:var(--text-dim); }
 
+.tabla-scroll{ overflow-x:auto; -webkit-overflow-scrolling:touch; }
 table{ width:100%; border-collapse:collapse; font-size:13px; }
 thead th{ text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.6px; color:var(--text-dim); padding:0 10px 10px; font-weight:600; border-bottom:1px solid var(--border);}
 tbody td{ padding:11px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
@@ -125,3 +126,23 @@ tbody tr:last-child td{ border-bottom:none; }
 .modal{ background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:22px; width:100%; max-width:340px; }
 .modal h2{ font-size:13px; text-transform:uppercase; letter-spacing:1px; color:var(--text-dim); margin:0 0 14px; }
 .modal-mensaje{ font-size:13.5px; color:var(--text); line-height:1.5; margin:0 0 16px; }
+
+@media (max-width: 600px){
+  /* iOS Safari hace zoom automático al enfocar un input con font-size
+     menor a 16px - en desktop se usa 13.5px por prolijidad, pero en
+     mobile 16px evita ese zoom molesto en cada campo. */
+  select, input, textarea{ font-size:16px; }
+
+  .wrap{ padding:20px 16px 48px; }
+  .login-wrap{ margin:60px auto; padding:0 16px; }
+  .card{ padding:16px; }
+
+  header{ gap:10px; }
+  .estado-backend{ font-size:10px; }
+
+  .barra-fila{ grid-template-columns:78px 1fr 38px; gap:6px; font-size:11.5px; }
+}
+
+@media (max-width: 380px){
+  .row2{ grid-template-columns:1fr; }
+}

@@ -133,14 +133,16 @@
     <div class="card">
       <h2>En Odoo · <span id="subtareaActual">—</span> <span class="hud" id="totalSubtarea" style="float:right"></span></h2>
       <input type="text" id="buscarHistorial" placeholder="Buscar en descripción o fecha..." oninput="filtrarHistorial()" style="margin-bottom:12px;">
-      <table>
-        <thead>
-          <tr><th style="width:16%">Fecha</th><th style="width:12%">Horas</th><th>Descripción</th></tr>
-        </thead>
-        <tbody id="tbodyOdoo">
-          <tr><td colspan="3" class="empty">Elige una subtarea para ver su historial.</td></tr>
-        </tbody>
-      </table>
+      <div class="tabla-scroll">
+        <table>
+          <thead>
+            <tr><th style="width:16%">Fecha</th><th style="width:12%">Horas</th><th>Descripción</th></tr>
+          </thead>
+          <tbody id="tbodyOdoo">
+            <tr><td colspan="3" class="empty">Elige una subtarea para ver su historial.</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 
@@ -155,14 +157,16 @@
         <button class="primary" style="margin-top:0;" onclick="consultarDia()">Ver horas de ese día</button>
       </div>
     </div>
-    <table style="margin-top:16px;">
-      <thead>
-        <tr><th style="width:26%">Subtarea</th><th style="width:12%">Horas</th><th>Descripción</th><th style="width:90px"></th></tr>
-      </thead>
-      <tbody id="tbodyDia">
-        <tr><td colspan="4" class="empty">Elige una fecha y presiona "Ver horas de ese día".</td></tr>
-      </tbody>
-    </table>
+    <div class="tabla-scroll" style="margin-top:16px;">
+      <table>
+        <thead>
+          <tr><th style="width:26%">Subtarea</th><th style="width:12%">Horas</th><th>Descripción</th><th style="width:90px"></th></tr>
+        </thead>
+        <tbody id="tbodyDia">
+          <tr><td colspan="4" class="empty">Elige una fecha y presiona "Ver horas de ese día".</td></tr>
+        </tbody>
+      </table>
+    </div>
     <div class="status" id="totalDia" style="margin-top:10px;"></div>
   </div>
 
@@ -182,14 +186,16 @@
 
   <div class="card" id="panelUsuarios" style="margin-top:20px; display:none;">
     <h2>Usuarios</h2>
-    <table>
-      <thead>
-        <tr><th>Usuario</th><th>Tarjeta</th><th style="width:60px">Admin</th><th style="width:90px"></th></tr>
-      </thead>
-      <tbody id="tbodyUsuarios">
-        <tr><td colspan="4" class="empty">Cargando...</td></tr>
-      </tbody>
-    </table>
+    <div class="tabla-scroll">
+      <table>
+        <thead>
+          <tr><th>Usuario</th><th>Tarjeta</th><th style="width:60px">Admin</th><th style="width:90px"></th></tr>
+        </thead>
+        <tbody id="tbodyUsuarios">
+          <tr><td colspan="4" class="empty">Cargando...</td></tr>
+        </tbody>
+      </table>
+    </div>
 
     <h2 style="margin-top:22px;">Crear usuario nuevo</h2>
     <label for="nuevoUsuarioNombre">Usuario</label>
@@ -206,14 +212,16 @@
     <div class="status" id="usuariosStatus"></div>
 
     <h2 style="margin-top:22px;">Auditoría · últimas acciones</h2>
-    <table>
-      <thead>
-        <tr><th style="width:22%">Fecha (UTC)</th><th style="width:18%">Quién</th><th style="width:20%">Acción</th><th>Detalle</th></tr>
-      </thead>
-      <tbody id="tbodyAuditoria">
-        <tr><td colspan="4" class="empty">Cargando...</td></tr>
-      </tbody>
-    </table>
+    <div class="tabla-scroll">
+      <table>
+        <thead>
+          <tr><th style="width:22%">Fecha (UTC)</th><th style="width:18%">Quién</th><th style="width:20%">Acción</th><th>Detalle</th></tr>
+        </thead>
+        <tbody id="tbodyAuditoria">
+          <tr><td colspan="4" class="empty">Cargando...</td></tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 
   <div class="note">
