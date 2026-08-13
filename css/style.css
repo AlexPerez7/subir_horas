@@ -100,3 +100,4 @@ tbody tr:last-child td{ border-bottom:none; }
 .modal-backdrop{ position:fixed; inset:0; background:rgba(0,0,0,.55); display:flex; align-items:center; justify-content:center; padding:20px; z-index:10; }
 .modal{ background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:22px; width:100%; max-width:340px; }
 .modal h2{ font-size:13px; text-transform:uppercase; letter-spacing:1px; color:var(--text-dim); margin:0 0 14px; }
+.modal-mensaje{ font-size:13.5px; color:var(--text); line-height:1.5; margin:0 0 16px; }

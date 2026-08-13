@@ -149,6 +149,68 @@ function cerrarSesion(){
   document.getElementById('loginStatus').textContent = '';
 }
 
+function _modalGenerico({titulo, mensaje, conInput, valorInicial, tipoInput, textoAceptar, soloAceptar}){
+  return new Promise(resolve => {
+    const backdrop = document.getElementById('modalGenericoBackdrop');
+    const inputEl = document.getElementById('modalGenericoInput');
+    const btnAceptar = document.getElementById('modalGenericoAceptar');
+    const btnCancelar = document.getElementById('modalGenericoCancelar');
+
+    document.getElementById('modalGenericoTitulo').textContent = titulo;
+    document.getElementById('modalGenericoMensaje').textContent = mensaje;
+    btnAceptar.textContent = textoAceptar || 'Aceptar';
+    btnCancelar.style.display = soloAceptar ? 'none' : '';
+
+    if(conInput){
+      inputEl.style.display = '';
+      inputEl.type = tipoInput || 'text';
+      inputEl.value = valorInicial || '';
+    } else {
+      inputEl.style.display = 'none';
+    }
+
+    function limpiar(){
+      backdrop.style.display = 'none';
+      btnAceptar.onclick = null;
+      btnCancelar.onclick = null;
+      inputEl.onkeydown = null;
+    }
+    function aceptar(){
+      const valor = conInput ? inputEl.value : true;
+      limpiar();
+      resolve(valor);
+    }
+    function cancelar(){
+      limpiar();
+      resolve(conInput ? null : false);
+    }
+
+    btnAceptar.onclick = aceptar;
+    btnCancelar.onclick = cancelar;
+    inputEl.onkeydown = e => { if(e.key === 'Enter') aceptar(); };
+
+    backdrop.style.display = 'flex';
+    setTimeout(() => (conInput ? inputEl : btnAceptar).focus(), 30);
+  });
+}
+
+function confirmarAccion(mensaje, titulo){
+  return _modalGenerico({titulo: titulo || 'Confirmar', mensaje, textoAceptar: 'Eliminar'});
+}
+
+function pedirTexto(mensaje, opciones){
+  opciones = opciones || {};
+  return _modalGenerico({
+    titulo: opciones.titulo || 'Ingresar dato', mensaje, conInput: true,
+    valorInicial: opciones.valorInicial, tipoInput: opciones.tipo || 'text',
+    textoAceptar: opciones.textoAceptar || 'Aceptar'
+  });
+}
+
+function mostrarAlerta(mensaje, titulo){
+  return _modalGenerico({titulo: titulo || 'Aviso', mensaje, soloAceptar: true, textoAceptar: 'Aceptar'});
+}
+
 function toggleCambiarPassword(mostrar){
   document.getElementById('cambiarPasswordBackdrop').style.display = mostrar ? 'flex' : 'none';
   if(mostrar){
@@ -348,7 +410,9 @@ async function crearUsuarioNuevo(){
 }
 
 async function resetearPasswordUsuario(username){
-  const nueva = prompt('Nueva contraseña para "' + username + '" (mínimo 6 caracteres):');
+  const nueva = await pedirTexto('Nueva contraseña para "' + username + '" (mínimo 6 caracteres):', {
+    titulo: 'Restablecer contraseña', tipo: 'password', textoAceptar: 'Restablecer'
+  });
   if(!nueva) return;
   try{
     const res = await api('/api/usuarios/' + encodeURIComponent(username) + '/resetear-password', {
@@ -358,27 +422,28 @@ async function resetearPasswordUsuario(username){
     });
     const data = await res.json();
     if(!res.ok || data.error){
-      alert('Error: ' + (data.error || res.statusText));
+      await mostrarAlerta('Error: ' + (data.error || res.statusText));
       return;
     }
-    alert('Contraseña actualizada.');
+    await mostrarAlerta('Contraseña actualizada.');
   } catch(e){
-    alert('No se pudo conectar al backend: ' + e.message);
+    await mostrarAlerta('No se pudo conectar al backend: ' + e.message);
   }
 }
 
 async function eliminarUsuarioAdmin(username){
-  if(!confirm('¿Eliminar el usuario "' + username + '"? Esta acción no se puede deshacer.')) return;
+  const ok = await confirmarAccion('¿Eliminar el usuario "' + username + '"? Esta acción no se puede deshacer.', 'Eliminar usuario');
+  if(!ok) return;
   try{
     const res = await api('/api/usuarios/' + encodeURIComponent(username), { method: 'DELETE' });
     const data = await res.json();
     if(!res.ok || data.error){
-      alert('Error: ' + (data.error || res.statusText));
+      await mostrarAlerta('Error: ' + (data.error || res.statusText));
       return;
     }
     cargarUsuarios();
   } catch(e){
-    alert('No se pudo conectar al backend: ' + e.message);
+    await mostrarAlerta('No se pudo conectar al backend: ' + e.message);
   }
 }
 
@@ -669,18 +734,19 @@ function renderTablaDia(){
 }
 
 async function eliminarLineaDia(id){
-  if(!confirm('¿Eliminar esta entrada? Esta acción no se puede deshacer.')) return;
+  const ok = await confirmarAccion('¿Eliminar esta entrada? Esta acción no se puede deshacer.', 'Eliminar entrada');
+  if(!ok) return;
   try{
     const res = await api('/api/timesheet/' + id + '?tarjeta=' + encodeURIComponent(tarjetaActual()), { method: 'DELETE' });
     const data = await res.json();
     if(!res.ok || data.error){
-      alert('Error al eliminar: ' + (data.error || res.statusText));
+      await mostrarAlerta('Error al eliminar: ' + (data.error || res.statusText));
       return;
     }
     consultarDia();
     cargarResumen();
   } catch(e){
-    alert('No se pudo conectar al backend: ' + e.message);
+    await mostrarAlerta('No se pudo conectar al backend: ' + e.message);
   }
 }
 
@@ -717,13 +783,13 @@ async function guardarEdicion(id){
     });
     const data = await res.json();
     if(!res.ok || data.error){
-      alert('Error al guardar: ' + (data.error || res.statusText));
+      await mostrarAlerta('Error al guardar: ' + (data.error || res.statusText));
       return;
     }
     consultarDia();
     cargarResumen();
   } catch(e){
-    alert('No se pudo conectar al backend: ' + e.message);
+    await mostrarAlerta('No se pudo conectar al backend: ' + e.message);
   }
 }
 
