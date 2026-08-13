@@ -34,7 +34,7 @@ Variables de entorno esperadas (.env, NUNCA subir a git; ver .env.example):
     FRONTEND_ORIGINS=https://tu-usuario.github.io   (lista separada por comas)
 
     CRON_SECRET=<cadena aleatoria>   (opcional - habilita /api/recordatorio-cron
-        para el recordatorio automático por Teams; ver README)
+        para el recordatorio automático por Telegram; ver README)
 """
 
 import os

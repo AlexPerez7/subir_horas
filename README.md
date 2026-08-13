@@ -16,7 +16,7 @@ Consiste en un formulario web estático (publicado en **GitHub Pages**) conectad
 - [Publicar el frontend en GitHub Pages](#publicar-el-frontend-en-github-pages)
 - [Instalar como app (PWA)](#instalar-como-app-pwa)
 - [Mantener el backend despierto](#mantener-el-backend-despierto)
-- [Recordatorio por Teams](#recordatorio-por-teams)
+- [Recordatorio por Telegram](#recordatorio-por-telegram)
 - [Gestión de usuarios](#gestión-de-usuarios)
 - [Flujo de actualización](#flujo-de-actualización)
 - [Estructura del proyecto](#estructura-del-proyecto)
@@ -138,9 +138,11 @@ Render free duerme el servicio tras ~15 min sin tráfico (ver [limitaciones](#de
 
 ---
 
-## Recordatorio por Teams
+## Recordatorio por Telegram
 
-El banner que aparece dentro de la app ("no cargaste ayer") solo lo ves si la abrís. El workflow [`.github/workflows/recordatorio-teams.yml`](.github/workflows/recordatorio-teams.yml) hace lo mismo pero de forma proactiva: todas las mañanas de un día hábil consulta al backend y, si falta cargar el día hábil anterior, manda un mensaje a un canal de Teams.
+El banner que aparece dentro de la app ("no cargaste ayer") solo lo ves si la abrís. El workflow [`.github/workflows/recordatorio-telegram.yml`](.github/workflows/recordatorio-telegram.yml) hace lo mismo pero de forma proactiva: todas las mañanas de un día hábil consulta al backend y, si falta cargar el día hábil anterior, manda un mensaje por Telegram.
+
+(Antes se probó con un webhook de Microsoft Teams, pero la plantilla de Power Automate falla con "Call made for a thread which is not a ChatThread" cuando el destino es un chat contigo mismo — es una limitación de esa plantilla, no del payload. Telegram evita todo ese problema: es un solo `curl` sin OAuth ni flujos intermedios.)
 
 **1. Generar el secreto del cron**
 
@@ -150,26 +152,24 @@ python -c "import secrets; print(secrets.token_hex(32))"
 ```
 Cargalo como `CRON_SECRET` en las variables de entorno de Render.
 
-**2. Crear el webhook en Teams**
+**2. Crear el bot de Telegram**
 
-Microsoft está migrando los webhooks entrantes viejos ("Conectores de Office 365") a la app **Workflows** (Power Automate), así que los pasos exactos pueden variar un poco según tu versión de Teams:
-
-1. En el canal donde querés el aviso, abrí **⋯ (Más opciones) → Workflows**.
-2. Buscá una plantilla del estilo *"Post to a channel when a webhook request is received"* (o similar — el nombre varía).
-3. Al crearla te va a pedir un cuerpo de ejemplo para el pedido; usá `{"text": "mensaje de prueba"}` para que infiera el esquema, y mapeá ese campo `text` al cuerpo del mensaje que postea en el canal.
-4. Al final te da una URL de webhook — copiala.
-
-Si tu organización tiene los conectores/Workflows deshabilitados por política, vas a necesitar que un admin de Teams te lo habilite o cree el flujo por vos.
+1. En Telegram, buscá **@BotFather** y mandale `/newbot`.
+2. Elegí un nombre y un username (tiene que terminar en `bot`, ej. `subirhoras_bot`).
+3. Te va a dar un **token** tipo `123456789:AAExxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx` — es el `TELEGRAM_BOT_TOKEN`.
+4. Buscá a tu bot recién creado por su username y mandale cualquier mensaje (ej. "hola") — Telegram no deja que un bot te escriba primero, así que este paso es obligatorio.
+5. Con el token, abrí en el navegador: `https://api.telegram.org/bot<TOKEN>/getUpdates` (reemplazando `<TOKEN>`). En la respuesta JSON buscá `"chat":{"id":...}` — ese número es el `TELEGRAM_CHAT_ID`.
 
 **3. Cargar los secrets en GitHub**
 
 En el repo: **Settings → Secrets and variables → Actions → New repository secret**, y agregá:
 - `CRON_SECRET` — el mismo valor que pusiste en Render.
-- `TEAMS_WEBHOOK_URL` — la URL que te dio Teams en el paso anterior.
+- `TELEGRAM_BOT_TOKEN` — el token que te dio BotFather.
+- `TELEGRAM_CHAT_ID` — el id que sacaste de `getUpdates`.
 
 **4. Probar**
 
-Pestaña **Actions → Recordatorio de horas por Teams → Run workflow**. Si los dos secrets están bien cargados, el job debería pasar en verde (y mandar el aviso a Teams si de verdad te falta cargar el día hábil anterior). Mientras no los cargues, este workflow va a fallar — es el comportamiento esperado hasta terminar de configurarlo, no un bug.
+Pestaña **Actions → Recordatorio de horas por Telegram → Run workflow**. Si los tres secrets están bien cargados, el job debería pasar en verde (y mandar el aviso por Telegram si de verdad te falta cargar el día hábil anterior). Mientras no los cargues, este workflow va a fallar — es el comportamiento esperado hasta terminar de configurarlo, no un bug.
 
 ---
 
@@ -244,7 +244,7 @@ subir_horas/
 ├── .github/
 │   └── workflows/
 │       ├── keep-warm.yml            # ping periódico a Render para que no se duerma
-│       └── recordatorio-teams.yml   # avisa por Teams si falta cargar horas
+│       └── recordatorio-telegram.yml # avisa por Telegram si falta cargar horas
 ├── backend_odoo.py        # API Flask, login + intermediario con Odoo (se despliega en Render)
 ├── crear_usuario.py       # CLI para crear/resetear usuarios
 ├── requirements.txt       # dependencias del backend
