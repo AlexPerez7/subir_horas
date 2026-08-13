@@ -89,6 +89,7 @@ async function inicializar(){
 
   verificarRecordatorio();
   cargarResumen();
+  cargarHeatmap();
 }
 
 let _intervaloBackend = null;
@@ -130,9 +131,49 @@ async function cargarResumen(){
     const data = await res.json();
     document.getElementById('resumenSemana').textContent = data.semana.toFixed(1) + 'h';
     document.getElementById('resumenMes').textContent = data.mes.toFixed(1) + 'h';
+    renderGraficoSubtareas(data.por_subtarea || []);
   } catch(e){
     document.getElementById('resumenSemana').textContent = '—';
     document.getElementById('resumenMes').textContent = '—';
+  }
+}
+
+function renderGraficoSubtareas(porSubtarea){
+  const cont = document.getElementById('graficoSubtareas');
+  if(porSubtarea.length === 0){
+    cont.innerHTML = '<p class="empty">Sin horas cargadas esta semana todavía.</p>';
+    return;
+  }
+  const maxHoras = Math.max(...porSubtarea.map(s => s.horas));
+  cont.innerHTML = porSubtarea.map(s => `
+    <div class="barra-fila">
+      <span class="barra-label" title="${s.subtarea.replace(/"/g,'&quot;')}">${s.subtarea}</span>
+      <div class="barra-track"><div class="barra-fill" style="width:${(s.horas / maxHoras * 100).toFixed(0)}%"></div></div>
+      <span class="barra-valor">${s.horas.toFixed(1)}h</span>
+    </div>`).join('');
+}
+
+async function cargarHeatmap(){
+  const cont = document.getElementById('heatmapDias');
+  try{
+    const res = await api('/api/dias-cargados?dias=30');
+    const data = await res.json();
+    const porFecha = {};
+    data.dias.forEach(d => { porFecha[d.fecha] = d.horas; });
+
+    const hoy = new Date();
+    const celdas = [];
+    for(let i = 29; i >= 0; i--){
+      const d = new Date(Date.UTC(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()));
+      d.setUTCDate(d.getUTCDate() - i);
+      const iso = d.toISOString().slice(0, 10);
+      const horas = porFecha[iso] || 0;
+      const nivel = horas === 0 ? 0 : horas < 2 ? 1 : horas < 4 ? 2 : horas < 6 ? 3 : 4;
+      celdas.push(`<span class="heatmap-celda nivel-${nivel}" title="${formatearFecha(iso)}: ${horas.toFixed(1)}h"></span>`);
+    }
+    cont.innerHTML = celdas.join('');
+  } catch(e){
+    cont.innerHTML = '<p class="empty">No se pudo cargar la actividad reciente.</p>';
   }
 }
 
@@ -629,6 +670,7 @@ async function registrarEnOdoo(){
     document.getElementById('detalle').value = '';
     cargarHistorial();
     cargarResumen();
+    cargarHeatmap();
   } catch(e){
     mostrarStatus('No se pudo conectar al backend: ' + e.message, 'err');
   } finally {
@@ -680,6 +722,7 @@ async function registrarEnLote(){
         btn.disabled = false;
         cargarHistorial();
         cargarResumen();
+        cargarHeatmap();
         return;
       }
       creados++;
@@ -688,6 +731,7 @@ async function registrarEnLote(){
       btn.disabled = false;
       cargarHistorial();
       cargarResumen();
+      cargarHeatmap();
       return;
     }
   }
@@ -698,6 +742,7 @@ async function registrarEnLote(){
   btn.disabled = false;
   cargarHistorial();
   cargarResumen();
+  cargarHeatmap();
 }
 
 async function deshacer(id){
@@ -709,6 +754,7 @@ async function deshacer(id){
       mostrarStatus('Entrada eliminada.', 'ok');
       cargarHistorial();
       cargarResumen();
+      cargarHeatmap();
     } else {
       mostrarStatus('No se pudo deshacer.', 'err');
     }
@@ -870,6 +916,7 @@ async function eliminarLineaDia(id){
     }
     consultarDia();
     cargarResumen();
+    cargarHeatmap();
   } catch(e){
     await mostrarAlerta('No se pudo conectar al backend: ' + e.message);
   }
@@ -918,6 +965,7 @@ async function guardarEdicion(id){
     }
     consultarDia();
     cargarResumen();
+    cargarHeatmap();
   } catch(e){
     await mostrarAlerta('No se pudo conectar al backend: ' + e.message);
   }

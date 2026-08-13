@@ -637,7 +637,7 @@ def resumen_horas():
 
     task_ids = subtareas_ids_de_tarjeta(tarjeta)
     if not task_ids:
-        return jsonify({"semana": 0, "mes": 0})
+        return jsonify({"semana": 0, "mes": 0, "por_subtarea": []})
 
     fecha_min = min(inicio_semana, inicio_mes).isoformat()
     fecha_max = max(fin_semana, fin_mes).isoformat()
@@ -645,7 +645,7 @@ def resumen_horas():
     lineas = odoo_execute_kw(
         "account.analytic.line", "search_read",
         [[["task_id", "in", task_ids], ["date", ">=", fecha_min], ["date", "<=", fecha_max]]],
-        {"fields": ["date", "unit_amount"]},
+        {"fields": ["date", "unit_amount", "task_id"]},
     )
 
     inicio_semana_iso, fin_semana_iso = inicio_semana.isoformat(), fin_semana.isoformat()
@@ -654,7 +654,53 @@ def resumen_horas():
     total_semana = sum(l["unit_amount"] for l in lineas if inicio_semana_iso <= l["date"] <= fin_semana_iso)
     total_mes = sum(l["unit_amount"] for l in lineas if inicio_mes_iso <= l["date"] <= fin_mes_iso)
 
-    return jsonify({"semana": total_semana, "mes": total_mes})
+    lineas_semana = [l for l in lineas if inicio_semana_iso <= l["date"] <= fin_semana_iso]
+    ids_unicos = list({l["task_id"][0] for l in lineas_semana})
+    nombres = {}
+    if ids_unicos:
+        tareas = odoo_execute_kw("project.task", "read", [ids_unicos], {"fields": ["name"]})
+        nombres = {t["id"]: t["name"] for t in tareas}
+
+    por_subtarea_totales = {}
+    for l in lineas_semana:
+        nombre = nombres.get(l["task_id"][0], l["task_id"][1])
+        por_subtarea_totales[nombre] = por_subtarea_totales.get(nombre, 0) + l["unit_amount"]
+    por_subtarea = sorted(
+        [{"subtarea": k, "horas": v} for k, v in por_subtarea_totales.items()],
+        key=lambda x: -x["horas"],
+    )
+
+    return jsonify({"semana": total_semana, "mes": total_mes, "por_subtarea": por_subtarea})
+
+
+@app.route("/api/dias-cargados", methods=["GET"])
+def dias_cargados():
+    """
+    Uso: /api/dias-cargados?dias=30
+    Total de horas cargadas por día calendario en los últimos N días
+    (incluye hoy), para la tarjeta del usuario. Pensado para un
+    heatmap tipo calendario - los días sin horas no vienen en la
+    lista (se asumen 0 en el frontend).
+    """
+    tarjeta = tarjeta_de_la_request(request.args)
+    n = int(request.args.get("dias", 30))
+    hoy = date.today()
+    desde = hoy - timedelta(days=n - 1)
+
+    task_ids = subtareas_ids_de_tarjeta(tarjeta)
+    if not task_ids:
+        return jsonify({"dias": []})
+
+    lineas = odoo_execute_kw(
+        "account.analytic.line", "search_read",
+        [[["task_id", "in", task_ids], ["date", ">=", desde.isoformat()], ["date", "<=", hoy.isoformat()]]],
+        {"fields": ["date", "unit_amount"]},
+    )
+    totales = {}
+    for l in lineas:
+        totales[l["date"]] = totales.get(l["date"], 0) + l["unit_amount"]
+
+    return jsonify({"dias": [{"fecha": f, "horas": h} for f, h in totales.items()]})
 
 
 @app.route("/api/timesheet", methods=["POST"])
