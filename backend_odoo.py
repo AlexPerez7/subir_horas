@@ -190,7 +190,7 @@ def decodificar_token(token):
         return None
 
 
-RUTAS_PUBLICAS = ("/", "/api/login", "/api/recordatorio-cron")
+RUTAS_PUBLICAS = ("/", "/api/login", "/api/recordatorio-cron", "/api/resumen-semanal-cron")
 
 
 @app.before_request
@@ -693,16 +693,14 @@ def recordatorio_cron():
     return jsonify(_calcular_recordatorio(tarjeta))
 
 
-@app.route("/api/resumen", methods=["GET"])
-def resumen_horas():
+def _calcular_resumen(tarjeta):
     """
     Total de horas cargadas en la semana actual (lunes a domingo) y en
-    el mes actual (día 1 al último), para la tarjeta del usuario en
-    sesión. Se pide un único rango que cubre ambos períodos y se separa
-    en Python, porque cuando la semana actual cruza fin/inicio de mes
-    los dos rangos no son el uno subconjunto del otro.
+    el mes actual (día 1 al último), para la tarjeta dada. Se pide un
+    único rango que cubre ambos períodos y se separa en Python, porque
+    cuando la semana actual cruza fin/inicio de mes los dos rangos no
+    son el uno subconjunto del otro.
     """
-    tarjeta = g.usuario["tarjeta"]
     hoy = date.today()
 
     inicio_semana = hoy - timedelta(days=hoy.weekday())
@@ -716,7 +714,7 @@ def resumen_horas():
 
     task_ids = subtareas_ids_de_tarjeta(tarjeta)
     if not task_ids:
-        return jsonify({"semana": 0, "mes": 0, "por_subtarea": []})
+        return {"semana": 0, "mes": 0, "por_subtarea": []}
 
     fecha_min = min(inicio_semana, inicio_mes).isoformat()
     fecha_max = max(fin_semana, fin_mes).isoformat()
@@ -749,7 +747,31 @@ def resumen_horas():
         key=lambda x: -x["horas"],
     )
 
-    return jsonify({"semana": total_semana, "mes": total_mes, "por_subtarea": por_subtarea})
+    return {"semana": total_semana, "mes": total_mes, "por_subtarea": por_subtarea}
+
+
+@app.route("/api/resumen", methods=["GET"])
+def resumen_horas():
+    return jsonify(_calcular_resumen(g.usuario["tarjeta"]))
+
+
+@app.route("/api/resumen-semanal-cron", methods=["GET"])
+def resumen_semanal_cron():
+    """
+    Igual que /api/recordatorio-cron: pensada para un job automático
+    (GitHub Actions) sin usuario logueado, protegida por X-Cron-Secret.
+    Devuelve el total de horas de la semana actual para la tarjeta de
+    BOOTSTRAP_ADMIN_TARJETA, para mandar un resumen semanal por
+    Telegram (ver README).
+    """
+    if not CRON_SECRET or request.headers.get("X-Cron-Secret") != CRON_SECRET:
+        return jsonify({"error": "no encontrado"}), 404
+
+    tarjeta = os.environ.get("BOOTSTRAP_ADMIN_TARJETA", "").strip()
+    if not tarjeta:
+        return jsonify({"error": "no hay BOOTSTRAP_ADMIN_TARJETA configurada"}), 500
+
+    return jsonify(_calcular_resumen(tarjeta))
 
 
 @app.route("/api/dias-cargados", methods=["GET"])

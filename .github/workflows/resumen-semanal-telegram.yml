@@ -1,0 +1,37 @@
+name: Resumen semanal de horas por Telegram
+
+# Todos los viernes, junta el total de horas cargadas en la semana
+# actual (y el detalle por subtarea) y lo manda por Telegram - a
+# diferencia de .github/workflows/recordatorio-telegram.yml, que solo
+# avisa cuando falta cargar un día, este es un resumen informativo que
+# se manda siempre. Reusa los mismos secrets CRON_SECRET,
+# TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID (ver README).
+
+on:
+  schedule:
+    - cron: "0 20 * * 5"  # ~16-17h Chile (UTC-4/-3 según horario de verano), viernes
+  workflow_dispatch: {}
+
+jobs:
+  resumen:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Consultar resumen semanal
+        id: consulta
+        run: |
+          curl -fsS -H "X-Cron-Secret: ${{ secrets.CRON_SECRET }}" https://subir-horas.onrender.com/api/resumen-semanal-cron > resumen.json
+          cat resumen.json
+
+      - name: Armar y enviar mensaje por Telegram
+        run: |
+          SEMANA=$(jq -r '.semana' resumen.json)
+          DETALLE=$(jq -r '.por_subtarea[] | "- \(.subtarea): \(.horas)h"' resumen.json)
+          if [ -z "$DETALLE" ]; then
+            DETALLE="(sin horas cargadas esta semana)"
+          fi
+          TEXTO="📊 Resumen semanal: ${SEMANA}h cargadas esta semana.
+
+          $DETALLE"
+          curl -fsS -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode text="$TEXTO"
