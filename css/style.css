@@ -50,6 +50,9 @@ select:disabled{ opacity:.5; }
 
 .row2{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
 
+.lote-toggle{ display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text); cursor:pointer; }
+.lote-toggle input{ width:auto; }
+
 .chips{ display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
 .chip{
   background:var(--surface-2); border:1px solid var(--border); color:var(--text-dim);

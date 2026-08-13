@@ -212,6 +212,42 @@ function setFecha(offsetDias){
   document.getElementById('fecha').valueAsDate = d;
 }
 
+function diasHabilesEnRango(desde, hasta){
+  const [y1, m1, d1] = desde.split('-').map(Number);
+  const [y2, m2, d2] = hasta.split('-').map(Number);
+  const cur = new Date(Date.UTC(y1, m1 - 1, d1));
+  const fin = new Date(Date.UTC(y2, m2 - 1, d2));
+  const dias = [];
+  while(cur <= fin){
+    const dow = cur.getUTCDay();
+    if(dow !== 0 && dow !== 6) dias.push(cur.toISOString().slice(0, 10));
+    cur.setUTCDate(cur.getUTCDate() + 1);
+  }
+  return dias;
+}
+
+function alternarModoLote(){
+  const activo = document.getElementById('loteToggle').checked;
+  document.getElementById('fechaUnica').style.display = activo ? 'none' : '';
+  document.getElementById('fechaRango').style.display = activo ? '' : 'none';
+  document.getElementById('horasLote').style.display = activo ? '' : 'none';
+  document.getElementById('btnRegistrar').textContent = activo ? 'Registrar en lote (Odoo)' : 'Registrar en Odoo';
+  actualizarPreviewLote();
+}
+
+function actualizarPreviewLote(){
+  const el = document.getElementById('previewLote');
+  const desde = document.getElementById('fechaDesde').value;
+  const hasta = document.getElementById('fechaHasta').value;
+  if(!desde || !hasta){ el.textContent = ''; el.className = 'status'; return; }
+  if(hasta < desde){ el.textContent = '"Hasta" debe ser igual o posterior a "Desde".'; el.className = 'status err'; return; }
+  const dias = diasHabilesEnRango(desde, hasta);
+  el.className = 'status';
+  el.textContent = dias.length === 0
+    ? 'No hay días hábiles (lun-vie) en ese rango.'
+    : dias.length + ' día' + (dias.length === 1 ? '' : 's') + ' hábil' + (dias.length === 1 ? '' : 'es') + ': ' + dias.map(formatearFecha).join(', ');
+}
+
 function renderChipsDescripcion(lineas){
   const cont = document.getElementById('chipsDescripcion');
   const unicas = [...new Set(lineas.map(l => l.name).filter(Boolean))].slice(0, 5);
@@ -416,6 +452,10 @@ function formatearFecha(iso){
 }
 
 async function registrarEnOdoo(){
+  if(document.getElementById('loteToggle').checked){
+    return registrarEnLote();
+  }
+
   const tarjeta = tarjetaActual();
   const subtarea = document.getElementById('subtarea').value;
   const fecha = document.getElementById('fecha').value;
@@ -455,6 +495,66 @@ async function registrarEnOdoo(){
   } finally {
     btn.disabled = false;
   }
+}
+
+async function registrarEnLote(){
+  const tarjeta = tarjetaActual();
+  const subtarea = document.getElementById('subtarea').value;
+  const desde = document.getElementById('fechaDesde').value;
+  const hasta = document.getElementById('fechaHasta').value;
+  const horas = parseFloat(document.getElementById('horasLoteInput').value);
+  const detalle = document.getElementById('detalle').value.trim();
+  const btn = document.getElementById('btnRegistrar');
+
+  if(!desde || !hasta || hasta < desde){
+    mostrarStatus('Completa un rango de fechas válido (Desde ≤ Hasta).', 'err');
+    return;
+  }
+  const dias = diasHabilesEnRango(desde, hasta);
+  if(dias.length === 0){
+    mostrarStatus('No hay días hábiles (lun-vie) en ese rango.', 'err');
+    return;
+  }
+  if(!horas || horas <= 0){
+    mostrarStatus('Completa las horas por día (> 0) antes de registrar.', 'err');
+    return;
+  }
+
+  btn.disabled = true;
+  let creados = 0;
+
+  for(const fecha of dias){
+    mostrarStatus('Registrando ' + (creados + 1) + ' de ' + dias.length + ' (' + formatearFecha(fecha) + ')...');
+    try{
+      const res = await api('/api/timesheet', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({tarjeta, subtarea, fecha, horas, detalle})
+      });
+      const data = await res.json();
+      if(!res.ok || data.error){
+        mostrarStatus('Se registraron ' + creados + ' de ' + dias.length + ' días. Error en ' + formatearFecha(fecha) + ': ' + (data.error || res.statusText), 'err');
+        btn.disabled = false;
+        cargarHistorial();
+        cargarResumen();
+        return;
+      }
+      creados++;
+    } catch(e){
+      mostrarStatus('Se registraron ' + creados + ' de ' + dias.length + ' días. Se cortó la conexión: ' + e.message, 'err');
+      btn.disabled = false;
+      cargarHistorial();
+      cargarResumen();
+      return;
+    }
+  }
+
+  mostrarStatus('Registrados ' + creados + ' días en Odoo.', 'ok');
+  document.getElementById('horasLoteInput').value = '';
+  document.getElementById('detalle').value = '';
+  btn.disabled = false;
+  cargarHistorial();
+  cargarResumen();
 }
 
 async function deshacer(id){

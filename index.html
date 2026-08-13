@@ -60,7 +60,12 @@
       <label for="subtarea">Subtarea</label>
       <select id="subtarea" disabled><option>Selecciona una tarjeta primero</option></select>
 
-      <div class="row2">
+      <label class="lote-toggle">
+        <input type="checkbox" id="loteToggle" onchange="alternarModoLote()">
+        Cargar el mismo registro en varios días (rango)
+      </label>
+
+      <div class="row2" id="fechaUnica">
         <div>
           <label for="fecha">Fecha</label>
           <input type="date" id="fecha">
@@ -73,6 +78,22 @@
           <label for="horas">Horas</label>
           <input type="number" id="horas" step="0.25" min="0.25" placeholder="1.5">
         </div>
+      </div>
+
+      <div class="row2" id="fechaRango" style="display:none;">
+        <div>
+          <label for="fechaDesde">Desde</label>
+          <input type="date" id="fechaDesde" onchange="actualizarPreviewLote()">
+        </div>
+        <div>
+          <label for="fechaHasta">Hasta</label>
+          <input type="date" id="fechaHasta" onchange="actualizarPreviewLote()">
+        </div>
+      </div>
+      <div id="horasLote" style="display:none;">
+        <label for="horasLoteInput">Horas (por día)</label>
+        <input type="number" id="horasLoteInput" step="0.25" min="0.25" placeholder="1.5">
+        <div class="status" id="previewLote"></div>
       </div>
 
       <label for="detalle">Descripción</label>
