@@ -60,6 +60,7 @@ Además de cargar/editar/eliminar horas y ver el historial en vivo:
 - **Se recuerda la última tarjeta/subtarea** usada (en `localStorage` del navegador), para no reseleccionar en cada sesión.
 - **Indicador de conectividad** con el backend (conectando / despertando / conectado / sin conexión) en el header, y **aviso cuando la sesión está por expirar** (10 minutos antes), en vez de enterarte recién cuando falla una acción.
 - Los diálogos de confirmación/alerta son **modales propios** de la app, no los nativos del navegador (`confirm()`/`alert()`).
+- **Navegación por pestañas en mobile**: en pantallas chicas (≤820px), en vez de una sola página larga para deslizar, el contenido se agrupa en 4 pestañas con una barra fija abajo (Registrar / Resumen / Días / Admin) — patrón estándar de apps nativas. En desktop no cambia nada: se sigue viendo todo junto, sin pestañas.
 
 ---
 

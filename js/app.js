@@ -78,7 +78,6 @@ async function inicializar(){
     document.getElementById('labelTarjeta').style.display = '';
     document.getElementById('tarjeta').style.display = '';
     document.getElementById('tarjetaFija').style.display = 'none';
-    document.getElementById('panelUsuarios').style.display = 'block';
     cargarTarjetas();
     cargarUsuarios();
     cargarAuditoria();
@@ -91,10 +90,41 @@ async function inicializar(){
     cargarSubtareas();
   }
 
+  actualizarVisibilidadTabs();
   verificarRecordatorio();
   cargarResumen();
   cargarHeatmap();
 }
+
+let TAB_ACTIVA = 'registrar';
+
+function actualizarVisibilidadTabs(){
+  const esMobile = window.matchMedia('(max-width: 820px)').matches;
+  const paneles = {
+    resumen: document.getElementById('tabResumen'),
+    registrar: document.getElementById('tabRegistrar'),
+    dias: document.getElementById('tabDias'),
+    admin: document.getElementById('panelUsuarios'),
+  };
+  Object.keys(paneles).forEach(nombre => {
+    const el = paneles[nombre];
+    if(!el) return;
+    if(nombre === 'admin' && !ES_ADMIN){ el.style.display = 'none'; return; }
+    el.style.display = (!esMobile || nombre === TAB_ACTIVA) ? '' : 'none';
+  });
+  document.getElementById('tabbarAdminBtn').style.display = ES_ADMIN ? '' : 'none';
+  document.querySelectorAll('#tabbar button').forEach(b => {
+    b.classList.toggle('activo', b.dataset.tab === TAB_ACTIVA);
+  });
+}
+
+function mostrarTab(nombre){
+  TAB_ACTIVA = nombre;
+  actualizarVisibilidadTabs();
+  window.scrollTo(0, 0);
+}
+
+window.addEventListener('resize', actualizarVisibilidadTabs);
 
 let _intervaloBackend = null;
 let _timeoutDespertando = null;
