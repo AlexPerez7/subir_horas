@@ -21,11 +21,20 @@ body{
 header{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:28px; flex-wrap:wrap; gap:8px;}
 header h1{ font-size:19px; font-weight:600; margin:0; letter-spacing:.2px;}
 header .eyebrow{ font-family:var(--mono); font-size:11px; color:var(--accent); text-transform:uppercase; letter-spacing:1.2px; display:block; margin-bottom:4px;}
-.userbox{ font-family:var(--mono); font-size:12px; color:var(--text-dim); text-align:right;}
-.userbox > div{ display:inline; }
+.acc-side{ text-align:right; }
+.userbox{ position:relative; font-family:var(--mono); font-size:12px; color:var(--text-dim); text-align:right;}
 .userbox b{ color:var(--text); }
-.userbox a{ color:var(--accent); text-decoration:none; margin-left:10px; cursor:pointer; }
-.userbox a:hover{ text-decoration:underline; }
+
+/* Estructura compartida entre desktop y mobile: el avatar-btn solo se ve
+   en mobile (ver media query más abajo); en desktop el menú de cuenta
+   queda siempre expandido en línea, como texto plano. */
+.avatar-btn{ display:none; }
+.acc-menu, .acc-who, .acc-actions{ display:inline; }
+.acc-item{
+  background:none; border:none; padding:0; margin-left:10px; cursor:pointer;
+  color:var(--accent); font-size:12px; font-family:var(--mono);
+}
+.acc-item:hover{ text-decoration:underline; }
 
 .estado-backend{ display:inline-flex; align-items:center; gap:5px; font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:.5px; color:var(--text-dim); }
 .estado-backend .punto{ width:7px; height:7px; border-radius:50%; background:var(--text-dim); }
@@ -172,14 +181,44 @@ tbody tr:last-child td{ border-bottom:none; }
   .tabbar-icono{ font-size:17px; line-height:1; }
 
   /* "Cambiar contraseña" / "Cerrar sesión" como texto inline quedaban
-     muy chicos y pegados para tocar con el dedo - en mobile pasan a
-     botones propios, cada uno con un área de toque cómoda. */
-  header{ gap:12px; }
-  .userbox{ display:flex; flex-direction:column; align-items:flex-end; gap:8px; }
-  .userbox > div{ display:block; }
-  .userbox .acciones{ display:flex; gap:8px; }
-  .userbox .acciones a{
-    margin-left:0; padding:8px 12px; border:1px solid var(--border); border-radius:6px;
-    background:var(--surface-2); font-size:12px;
+     muy chicos y pegados para tocar con el dedo, y ese bloque de cuenta
+     siempre visible empujaba el contenido de cada pestaña hacia abajo.
+     En mobile la cuenta pasa a un avatar con las iniciales; tocarlo
+     despliega un menú flotante con el nombre y las acciones. */
+  header{ gap:12px; align-items:center; }
+  .acc-side{ display:flex; align-items:center; gap:10px; }
+  .estado-backend{ order:1; }
+  .userbox{ order:2; }
+
+  .avatar-btn{
+    display:flex; align-items:center; justify-content:center;
+    width:36px; height:36px; border-radius:50%; flex-shrink:0;
+    background:var(--surface-2); border:1px solid var(--border); color:var(--accent);
+    font-family:var(--mono); font-weight:700; font-size:13px; cursor:pointer;
   }
+  .avatar-btn:hover{ border-color:var(--accent-dim); }
+
+  .acc-menu{
+    position:absolute; top:calc(100% + 8px); right:0; width:200px; z-index:30;
+    background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:8px;
+    display:flex; flex-direction:column; gap:4px; text-align:left;
+    box-shadow:0 12px 28px -8px rgba(0,0,0,.5);
+    opacity:0; transform:translateY(-6px) scale(.98); pointer-events:none;
+    transition:opacity .16s ease, transform .16s ease;
+  }
+  .acc-menu.abierto{ opacity:1; transform:translateY(0) scale(1); pointer-events:auto; }
+  .acc-who{
+    font-size:12px; color:var(--text-dim); padding:4px 8px 8px;
+    border-bottom:1px solid var(--border); margin-bottom:2px; white-space:nowrap;
+  }
+  .acc-actions{ display:flex; flex-direction:column; gap:2px; }
+  .acc-item{
+    display:block; width:100%; text-align:left; margin-left:0;
+    color:var(--text); font-size:12.5px; font-family:var(--sans); padding:8px; border-radius:6px;
+  }
+  .acc-item:hover{ background:var(--surface); text-decoration:none; }
+}
+
+@media (prefers-reduced-motion: reduce){
+  .acc-menu{ transition:none; }
 }
