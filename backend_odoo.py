@@ -588,6 +588,49 @@ def recordatorio():
     return jsonify({"pendiente": len(lineas) == 0, "fecha": fecha_revisar.isoformat()})
 
 
+@app.route("/api/resumen", methods=["GET"])
+def resumen_horas():
+    """
+    Total de horas cargadas en la semana actual (lunes a domingo) y en
+    el mes actual (día 1 al último), para la tarjeta del usuario en
+    sesión. Se pide un único rango que cubre ambos períodos y se separa
+    en Python, porque cuando la semana actual cruza fin/inicio de mes
+    los dos rangos no son el uno subconjunto del otro.
+    """
+    tarjeta = g.usuario["tarjeta"]
+    hoy = date.today()
+
+    inicio_semana = hoy - timedelta(days=hoy.weekday())
+    fin_semana = inicio_semana + timedelta(days=6)
+    inicio_mes = hoy.replace(day=1)
+    fin_mes = (
+        date(hoy.year, hoy.month + 1, 1) - timedelta(days=1)
+        if hoy.month < 12
+        else date(hoy.year, 12, 31)
+    )
+
+    task_ids = subtareas_ids_de_tarjeta(tarjeta)
+    if not task_ids:
+        return jsonify({"semana": 0, "mes": 0})
+
+    fecha_min = min(inicio_semana, inicio_mes).isoformat()
+    fecha_max = max(fin_semana, fin_mes).isoformat()
+
+    lineas = odoo_execute_kw(
+        "account.analytic.line", "search_read",
+        [[["task_id", "in", task_ids], ["date", ">=", fecha_min], ["date", "<=", fecha_max]]],
+        {"fields": ["date", "unit_amount"]},
+    )
+
+    inicio_semana_iso, fin_semana_iso = inicio_semana.isoformat(), fin_semana.isoformat()
+    inicio_mes_iso, fin_mes_iso = inicio_mes.isoformat(), fin_mes.isoformat()
+
+    total_semana = sum(l["unit_amount"] for l in lineas if inicio_semana_iso <= l["date"] <= fin_semana_iso)
+    total_mes = sum(l["unit_amount"] for l in lineas if inicio_mes_iso <= l["date"] <= fin_mes_iso)
+
+    return jsonify({"semana": total_semana, "mes": total_mes})
+
+
 @app.route("/api/timesheet", methods=["POST"])
 def crear_timesheet():
     data = request.get_json()

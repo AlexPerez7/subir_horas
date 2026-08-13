@@ -83,6 +83,19 @@ async function inicializar(){
   }
 
   verificarRecordatorio();
+  cargarResumen();
+}
+
+async function cargarResumen(){
+  try{
+    const res = await api('/api/resumen');
+    const data = await res.json();
+    document.getElementById('resumenSemana').textContent = data.semana.toFixed(1) + 'h';
+    document.getElementById('resumenMes').textContent = data.mes.toFixed(1) + 'h';
+  } catch(e){
+    document.getElementById('resumenSemana').textContent = '—';
+    document.getElementById('resumenMes').textContent = '—';
+  }
 }
 
 async function iniciarSesion(){
@@ -436,6 +449,7 @@ async function registrarEnOdoo(){
     document.getElementById('horas').value = '';
     document.getElementById('detalle').value = '';
     cargarHistorial();
+    cargarResumen();
   } catch(e){
     mostrarStatus('No se pudo conectar al backend: ' + e.message, 'err');
   } finally {
@@ -451,6 +465,7 @@ async function deshacer(id){
     if(data.ok){
       mostrarStatus('Entrada eliminada.', 'ok');
       cargarHistorial();
+      cargarResumen();
     } else {
       mostrarStatus('No se pudo deshacer.', 'err');
     }
@@ -563,6 +578,7 @@ async function eliminarLineaDia(id){
       return;
     }
     consultarDia();
+    cargarResumen();
   } catch(e){
     alert('No se pudo conectar al backend: ' + e.message);
   }
@@ -605,6 +621,7 @@ async function guardarEdicion(id){
       return;
     }
     consultarDia();
+    cargarResumen();
   } catch(e){
     alert('No se pudo conectar al backend: ' + e.message);
   }
