@@ -81,6 +81,7 @@ async function inicializar(){
     document.getElementById('panelUsuarios').style.display = 'block';
     cargarTarjetas();
     cargarUsuarios();
+    cargarAuditoria();
   } else {
     document.getElementById('labelTarjeta').style.display = 'none';
     document.getElementById('tarjeta').style.display = 'none';
@@ -483,6 +484,31 @@ async function cargarUsuarios(){
   }
 }
 
+function formatearFechaHora(iso){
+  return iso.replace('T', ' ').replace('Z', '');
+}
+
+async function cargarAuditoria(){
+  const tbody = document.getElementById('tbodyAuditoria');
+  try{
+    const res = await api('/api/auditoria');
+    const entradas = await res.json();
+    if(entradas.length === 0){
+      tbody.innerHTML = '<tr><td colspan="4" class="empty">Sin acciones registradas todavía.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = entradas.map(a => `
+      <tr>
+        <td class="desc">${formatearFechaHora(a.ts)}</td>
+        <td class="desc">${a.actor}</td>
+        <td class="desc">${a.accion}</td>
+        <td class="desc">${a.detalle || '—'}</td>
+      </tr>`).join('');
+  } catch(e){
+    tbody.innerHTML = '<tr><td colspan="4" class="empty">Error cargando auditoría.</td></tr>';
+  }
+}
+
 async function crearUsuarioNuevo(){
   const username = document.getElementById('nuevoUsuarioNombre').value.trim();
   const tarjeta = document.getElementById('nuevoUsuarioTarjeta').value;
@@ -517,6 +543,7 @@ async function crearUsuarioNuevo(){
     document.getElementById('nuevoUsuarioPassword').value = '';
     document.getElementById('nuevoUsuarioAdmin').checked = false;
     cargarUsuarios();
+    cargarAuditoria();
   } catch(e){
     statusEl.className = 'status err';
     statusEl.textContent = 'No se pudo conectar al backend: ' + e.message;
@@ -540,6 +567,7 @@ async function resetearPasswordUsuario(username){
       return;
     }
     await mostrarAlerta('Contraseña actualizada.');
+    cargarAuditoria();
   } catch(e){
     await mostrarAlerta('No se pudo conectar al backend: ' + e.message);
   }
@@ -556,6 +584,7 @@ async function eliminarUsuarioAdmin(username){
       return;
     }
     cargarUsuarios();
+    cargarAuditoria();
   } catch(e){
     await mostrarAlerta('No se pudo conectar al backend: ' + e.message);
   }

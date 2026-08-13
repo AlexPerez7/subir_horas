@@ -40,7 +40,7 @@ Variables de entorno esperadas (.env, NUNCA subir a git; ver .env.example):
 import os
 import sqlite3
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 import requests
 from flask import Flask, request, jsonify, g
@@ -87,6 +87,31 @@ def _inicializar_db():
             es_admin INTEGER NOT NULL DEFAULT 0
         )
     """)
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS auditoria (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts TEXT NOT NULL,
+            actor TEXT NOT NULL,
+            accion TEXT NOT NULL,
+            detalle TEXT
+        )
+    """)
+    con.commit()
+    con.close()
+
+
+def registrar_auditoria(accion, detalle=""):
+    """
+    Deja rastro de una acción de administración (crear/eliminar
+    usuario, resetear contraseña). Igual que usuarios.db, se pierde en
+    cada redeploy de Render free (disco efímero) - sirve para auditar
+    entre deploys, no como registro permanente.
+    """
+    con = sqlite3.connect(DB_PATH)
+    con.execute(
+        "INSERT INTO auditoria (ts, actor, accion, detalle) VALUES (?, ?, ?, ?)",
+        (datetime.utcnow().isoformat(timespec="seconds") + "Z", g.usuario["username"], accion, detalle),
+    )
     con.commit()
     con.close()
 
@@ -313,6 +338,7 @@ def crear_usuario_api():
     )
     con.commit()
     con.close()
+    registrar_auditoria("crear_usuario", f"username={username} tarjeta={tarjeta} es_admin={es_admin_nuevo}")
     return jsonify({"ok": True})
 
 
@@ -332,6 +358,7 @@ def resetear_password_usuario(username):
         return jsonify({"error": f"no existe el usuario '{username}'"}), 404
 
     actualizar_password(username, generate_password_hash(nueva))
+    registrar_auditoria("resetear_password", f"username={username}")
     return jsonify({"ok": True})
 
 
@@ -351,7 +378,22 @@ def borrar_usuario(username):
     con.close()
     if not cur.rowcount:
         return jsonify({"error": f"no existe el usuario '{username}'"}), 404
+    registrar_auditoria("eliminar_usuario", f"username={username}")
     return jsonify({"ok": True})
+
+
+@app.route("/api/auditoria", methods=["GET"])
+def listar_auditoria():
+    error = requiere_admin()
+    if error:
+        return error
+    con = sqlite3.connect(DB_PATH)
+    con.row_factory = sqlite3.Row
+    filas = con.execute(
+        "SELECT ts, actor, accion, detalle FROM auditoria ORDER BY id DESC LIMIT 50"
+    ).fetchall()
+    con.close()
+    return jsonify([dict(f) for f in filas])
 
 
 # --------------------------------------------------------------------
