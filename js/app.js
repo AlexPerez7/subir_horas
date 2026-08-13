@@ -70,9 +70,11 @@ async function inicializar(){
   iniciarMonitoreoBackend();
 
   document.getElementById('userbox').innerHTML =
-    '<b>' + yo.username + '</b> · ' + yo.tarjeta +
-    '<a onclick="toggleCambiarPassword(true)">Cambiar contraseña</a>' +
-    '<a onclick="cerrarSesion()">Cerrar sesión</a>';
+    '<div><b>' + yo.username + '</b> · ' + yo.tarjeta + '</div>' +
+    '<div class="acciones">' +
+      '<a onclick="toggleCambiarPassword(true)">Cambiar contraseña</a>' +
+      '<a onclick="cerrarSesion()">Cerrar sesión</a>' +
+    '</div>';
 
   if(ES_ADMIN){
     document.getElementById('labelTarjeta').style.display = '';
