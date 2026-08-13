@@ -1,0 +1,33 @@
+name: Recordatorio de horas por Teams
+
+# Todas las mañanas de un día hábil, pregunta al backend si el día
+# hábil anterior quedó sin horas cargadas y, si es así, manda un
+# aviso a un canal de Teams via un webhook de Workflows (Power
+# Automate) - ver README, "Recordatorio por Teams", para configurar
+# los secrets CRON_SECRET y TEAMS_WEBHOOK_URL. Sin esos dos secrets
+# cargados, este workflow va a fallar (esperado hasta terminar la
+# configuración).
+
+on:
+  schedule:
+    - cron: "0 12 * * 1-5"  # ~08-09h Chile (UTC-4/-3 según horario de verano), lunes a viernes
+  workflow_dispatch: {}
+
+jobs:
+  recordatorio:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Consultar si falta cargar horas
+        id: consulta
+        run: |
+          RESPUESTA=$(curl -fsS -H "X-Cron-Secret: ${{ secrets.CRON_SECRET }}" https://subir-horas.onrender.com/api/recordatorio-cron)
+          echo "$RESPUESTA"
+          echo "pendiente=$(echo "$RESPUESTA" | jq -r '.pendiente')" >> "$GITHUB_OUTPUT"
+          echo "fecha=$(echo "$RESPUESTA" | jq -r '.fecha')" >> "$GITHUB_OUTPUT"
+
+      - name: Avisar por Teams si falta cargar horas
+        if: steps.consulta.outputs.pendiente == 'true'
+        run: |
+          curl -fsS -X POST -H "Content-Type: application/json" \
+            -d "{\"text\": \"⏰ No tenés horas registradas el ${{ steps.consulta.outputs.fecha }}. ¿Se te olvidó cargarlas?\"}" \
+            "${{ secrets.TEAMS_WEBHOOK_URL }}"

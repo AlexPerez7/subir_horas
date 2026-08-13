@@ -32,6 +32,9 @@ Variables de entorno esperadas (.env, NUNCA subir a git; ver .env.example):
     SESSION_LIFETIME_HORAS=8   (opcional, default 8 - vigencia del token)
 
     FRONTEND_ORIGINS=https://tu-usuario.github.io   (lista separada por comas)
+
+    CRON_SECRET=<cadena aleatoria>   (opcional - habilita /api/recordatorio-cron
+        para el recordatorio automático por Teams; ver README)
 """
 
 import os
@@ -58,6 +61,7 @@ DB_PATH = os.path.join(_CARPETA, "usuarios.db")
 
 FRONTEND_ORIGINS = [o.strip() for o in os.environ.get("FRONTEND_ORIGINS", "").split(",") if o.strip()]
 TOKEN_LIFETIME_SEGUNDOS = int(os.environ.get("SESSION_LIFETIME_HORAS", 8)) * 3600
+CRON_SECRET = os.environ.get("CRON_SECRET", "")
 
 app = Flask(__name__, static_folder=None)
 app.secret_key = os.environ["SECRET_KEY"]
@@ -160,7 +164,7 @@ def decodificar_token(token):
         return None
 
 
-RUTAS_PUBLICAS = ("/", "/api/login")
+RUTAS_PUBLICAS = ("/", "/api/login", "/api/recordatorio-cron")
 
 
 @app.before_request
@@ -567,25 +571,47 @@ def dias_faltantes():
     return jsonify({"faltantes": faltantes})
 
 
-@app.route("/api/recordatorio", methods=["GET"])
-def recordatorio():
-    """
-    Avisa si el último día hábil no tiene ninguna hora registrada,
-    para la tarjeta del usuario en sesión.
-    """
-    tarjeta = g.usuario["tarjeta"]
+def _calcular_recordatorio(tarjeta):
     fecha_revisar = dia_habil_anterior(date.today())
-
     task_ids = subtareas_ids_de_tarjeta(tarjeta)
     if not task_ids:
-        return jsonify({"pendiente": False})
+        return {"pendiente": False, "fecha": fecha_revisar.isoformat()}
 
     lineas = odoo_execute_kw(
         "account.analytic.line", "search_read",
         [[["task_id", "in", task_ids], ["date", "=", fecha_revisar.isoformat()]]],
         {"fields": ["id"], "limit": 1},
     )
-    return jsonify({"pendiente": len(lineas) == 0, "fecha": fecha_revisar.isoformat()})
+    return {"pendiente": len(lineas) == 0, "fecha": fecha_revisar.isoformat()}
+
+
+@app.route("/api/recordatorio", methods=["GET"])
+def recordatorio():
+    """
+    Avisa si el último día hábil no tiene ninguna hora registrada,
+    para la tarjeta del usuario en sesión.
+    """
+    return jsonify(_calcular_recordatorio(g.usuario["tarjeta"]))
+
+
+@app.route("/api/recordatorio-cron", methods=["GET"])
+def recordatorio_cron():
+    """
+    Igual que /api/recordatorio, pero pensada para un job automático
+    (GitHub Actions) sin usuario logueado - protegida por un secreto
+    compartido (header X-Cron-Secret) en vez de un token de sesión.
+    Revisa la tarjeta de BOOTSTRAP_ADMIN_TARJETA. Si CRON_SECRET no
+    está configurado, el endpoint queda deshabilitado (404) en vez de
+    aceptar pedidos sin protección.
+    """
+    if not CRON_SECRET or request.headers.get("X-Cron-Secret") != CRON_SECRET:
+        return jsonify({"error": "no encontrado"}), 404
+
+    tarjeta = os.environ.get("BOOTSTRAP_ADMIN_TARJETA", "").strip()
+    if not tarjeta:
+        return jsonify({"error": "no hay BOOTSTRAP_ADMIN_TARJETA configurada"}), 500
+
+    return jsonify(_calcular_recordatorio(tarjeta))
 
 
 @app.route("/api/resumen", methods=["GET"])

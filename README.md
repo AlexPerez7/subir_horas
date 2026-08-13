@@ -16,6 +16,7 @@ Consiste en un formulario web estático (publicado en **GitHub Pages**) conectad
 - [Publicar el frontend en GitHub Pages](#publicar-el-frontend-en-github-pages)
 - [Instalar como app (PWA)](#instalar-como-app-pwa)
 - [Mantener el backend despierto](#mantener-el-backend-despierto)
+- [Recordatorio por Teams](#recordatorio-por-teams)
 - [Gestión de usuarios](#gestión-de-usuarios)
 - [Flujo de actualización](#flujo-de-actualización)
 - [Estructura del proyecto](#estructura-del-proyecto)
@@ -137,6 +138,41 @@ Render free duerme el servicio tras ~15 min sin tráfico (ver [limitaciones](#de
 
 ---
 
+## Recordatorio por Teams
+
+El banner que aparece dentro de la app ("no cargaste ayer") solo lo ves si la abrís. El workflow [`.github/workflows/recordatorio-teams.yml`](.github/workflows/recordatorio-teams.yml) hace lo mismo pero de forma proactiva: todas las mañanas de un día hábil consulta al backend y, si falta cargar el día hábil anterior, manda un mensaje a un canal de Teams.
+
+**1. Generar el secreto del cron**
+
+Igual que `SECRET_KEY`:
+```powershell
+python -c "import secrets; print(secrets.token_hex(32))"
+```
+Cargalo como `CRON_SECRET` en las variables de entorno de Render.
+
+**2. Crear el webhook en Teams**
+
+Microsoft está migrando los webhooks entrantes viejos ("Conectores de Office 365") a la app **Workflows** (Power Automate), así que los pasos exactos pueden variar un poco según tu versión de Teams:
+
+1. En el canal donde querés el aviso, abrí **⋯ (Más opciones) → Workflows**.
+2. Buscá una plantilla del estilo *"Post to a channel when a webhook request is received"* (o similar — el nombre varía).
+3. Al crearla te va a pedir un cuerpo de ejemplo para el pedido; usá `{"text": "mensaje de prueba"}` para que infiera el esquema, y mapeá ese campo `text` al cuerpo del mensaje que postea en el canal.
+4. Al final te da una URL de webhook — copiala.
+
+Si tu organización tiene los conectores/Workflows deshabilitados por política, vas a necesitar que un admin de Teams te lo habilite o cree el flujo por vos.
+
+**3. Cargar los secrets en GitHub**
+
+En el repo: **Settings → Secrets and variables → Actions → New repository secret**, y agregá:
+- `CRON_SECRET` — el mismo valor que pusiste en Render.
+- `TEAMS_WEBHOOK_URL` — la URL que te dio Teams en el paso anterior.
+
+**4. Probar**
+
+Pestaña **Actions → Recordatorio de horas por Teams → Run workflow**. Si los dos secrets están bien cargados, el job debería pasar en verde (y mandar el aviso a Teams si de verdad te falta cargar el día hábil anterior). Mientras no los cargues, este workflow va a fallar — es el comportamiento esperado hasta terminar de configurarlo, no un bug.
+
+---
+
 ## Gestión de usuarios
 
 **No hay registro abierto a propósito**: cualquiera con el link de GitHub Pages podría crearse una cuenta y elegir a qué tarjeta de Odoo cargarle horas si el alta fuera pública. En cambio, hay un panel de administración dentro de la propia app.
@@ -207,7 +243,8 @@ subir_horas/
 ├── favicon.ico
 ├── .github/
 │   └── workflows/
-│       └── keep-warm.yml  # ping periódico a Render para que no se duerma
+│       ├── keep-warm.yml            # ping periódico a Render para que no se duerma
+│       └── recordatorio-teams.yml   # avisa por Teams si falta cargar horas
 ├── backend_odoo.py        # API Flask, login + intermediario con Odoo (se despliega en Render)
 ├── crear_usuario.py       # CLI para crear/resetear usuarios
 ├── requirements.txt       # dependencias del backend
