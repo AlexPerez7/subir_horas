@@ -39,6 +39,7 @@ Variables de entorno esperadas (.env, NUNCA subir a git; ver .env.example):
 
 import os
 import sqlite3
+import time
 from datetime import date, timedelta
 
 import requests
@@ -187,22 +188,58 @@ def health():
     return jsonify({"status": "ok", "service": "registro-horas-backend"})
 
 
+# Bloqueo simple tras varios intentos fallidos de login, en memoria del
+# proceso (no en SQLite): alcanza porque el Procfile corre un único
+# worker de gunicorn, así que no hace falta coordinar estado entre
+# procesos. Se resetea en cada redeploy, igual que usuarios.db.
+_intentos_login = {}
+INTENTOS_MAXIMOS = 5
+BLOQUEO_SEGUNDOS = 300
+
+
+def _segundos_bloqueado(username):
+    estado = _intentos_login.get(username)
+    if not estado:
+        return 0
+    return max(0, estado["bloqueado_hasta"] - time.time())
+
+
+def _registrar_intento_fallido(username):
+    estado = _intentos_login.setdefault(username, {"conteo": 0, "bloqueado_hasta": 0})
+    estado["conteo"] += 1
+    if estado["conteo"] >= INTENTOS_MAXIMOS:
+        estado["bloqueado_hasta"] = time.time() + BLOQUEO_SEGUNDOS
+        estado["conteo"] = 0
+
+
+def _limpiar_intentos(username):
+    _intentos_login.pop(username, None)
+
+
 @app.route("/api/login", methods=["POST"])
 def login():
     data = request.get_json(silent=True) or {}
     username = data.get("username", "").strip().lower()
     password = data.get("password", "")
 
+    restante = _segundos_bloqueado(username)
+    if restante > 0:
+        minutos = int(restante // 60) + 1
+        return jsonify({"error": f"Demasiados intentos fallidos. Probá de nuevo en {minutos} min."}), 429
+
     usuario = obtener_usuario(username)
     if not usuario or not check_password_hash(usuario["password_hash"], password):
+        _registrar_intento_fallido(username)
         return jsonify({"error": "Usuario o contraseña incorrectos."}), 401
 
+    _limpiar_intentos(username)
     return jsonify({
         "ok": True,
         "token": generar_token(usuario),
         "username": usuario["username"],
         "tarjeta": usuario["tarjeta"],
         "es_admin": bool(usuario["es_admin"]),
+        "expira_en_segundos": TOKEN_LIFETIME_SEGUNDOS,
     })
 
 

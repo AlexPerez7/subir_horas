@@ -20,9 +20,12 @@ document.getElementById('fechaConsulta').valueAsDate = new Date();
 // Internet...) bloquean por defecto las cookies cross-site aunque
 // tengan SameSite=None; Secure. Guardamos el token en localStorage y
 // lo mandamos como header en cada pedido en vez de depender de cookies.
+const EXPIRA_KEY = 'registro_horas_expira_ts';
+const AVISO_EXPIRACION_MS = 10 * 60 * 1000;
+
 function getToken(){ return localStorage.getItem(TOKEN_KEY); }
 function setToken(token){ localStorage.setItem(TOKEN_KEY, token); }
-function clearToken(){ localStorage.removeItem(TOKEN_KEY); }
+function clearToken(){ localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(EXPIRA_KEY); }
 
 function api(path, options){
   options = options || {};
@@ -121,8 +124,33 @@ async function verificarBackend(){
 
 function iniciarMonitoreoBackend(){
   verificarBackend();
+  verificarExpiracionSesion();
   if(_intervaloBackend) return;
-  _intervaloBackend = setInterval(verificarBackend, 45000);
+  _intervaloBackend = setInterval(() => {
+    verificarBackend();
+    verificarExpiracionSesion();
+  }, 45000);
+}
+
+function verificarExpiracionSesion(){
+  const banner = document.getElementById('bannerExpiracion');
+  const expiraTs = parseInt(localStorage.getItem(EXPIRA_KEY), 10);
+  if(!expiraTs){ banner.style.display = 'none'; return; }
+
+  const restanteMs = expiraTs - Date.now();
+  if(restanteMs <= 0){
+    cerrarSesion();
+    const statusEl = document.getElementById('loginStatus');
+    statusEl.className = 'status err';
+    statusEl.textContent = 'Tu sesión expiró. Volvé a ingresar.';
+    return;
+  }
+  if(restanteMs <= AVISO_EXPIRACION_MS){
+    banner.style.display = 'block';
+    banner.textContent = '⏰ Tu sesión expira en ' + Math.ceil(restanteMs / 60000) + ' min. Guardá lo que estés haciendo y volvé a ingresar para renovarla.';
+  } else {
+    banner.style.display = 'none';
+  }
 }
 
 async function cargarResumen(){
@@ -206,6 +234,9 @@ async function iniciarSesion(){
       return;
     }
     setToken(data.token);
+    if(data.expira_en_segundos){
+      localStorage.setItem(EXPIRA_KEY, String(Date.now() + data.expira_en_segundos * 1000));
+    }
     document.getElementById('loginPassword').value = '';
     inicializar();
   } catch(e){
