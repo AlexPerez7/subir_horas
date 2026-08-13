@@ -14,6 +14,8 @@ Consiste en un formulario web estático (publicado en **GitHub Pages**) conectad
 - [Modo desarrollo (local)](#modo-desarrollo-local)
 - [Desplegar el backend en Render](#desplegar-el-backend-en-render)
 - [Publicar el frontend en GitHub Pages](#publicar-el-frontend-en-github-pages)
+- [Instalar como app (PWA)](#instalar-como-app-pwa)
+- [Mantener el backend despierto](#mantener-el-backend-despierto)
 - [Gestión de usuarios](#gestión-de-usuarios)
 - [Flujo de actualización](#flujo-de-actualización)
 - [Estructura del proyecto](#estructura-del-proyecto)
@@ -103,12 +105,35 @@ Cualquier cambio en `index.html` se ve recargando la pestaña; cambios en `backe
 
 ## Publicar el frontend en GitHub Pages
 
-1. Editá `index.html`: reemplazá la constante `API_BASE` por la URL real de tu backend en Render (con `https://`, sin barra final).
+1. Editá `js/app.js`: reemplazá la constante `API_BASE` (primera línea) por la URL real de tu backend en Render (con `https://`, sin barra final).
 2. Commiteá y pusheá.
 3. En GitHub: **Settings → Pages → Build and deployment → Deploy from a branch**, elegí `main` y carpeta `/ (root)`.
 4. GitHub te da una URL tipo `https://tu-usuario.github.io/subir_horas/`. Copiala en `FRONTEND_ORIGINS` en las variables de entorno de Render (sin barra final) y volvé a desplegar el backend para que el CORS la acepte.
 
 > **Nota sobre cuentas Free:** GitHub Pages publica el sitio en una URL pública en internet aunque el repositorio origen sea privado — no hay control de acceso a nivel de Pages en cuentas Free/Pro (eso requiere GitHub Enterprise). Verificá en tu cuenta si Pages está habilitado para repos privados; si no, la alternativa es pasar el repo a público (el código no debería tener datos sensibles hardcodeados, pero repasalo antes). El acceso real a los datos de horas siempre queda detrás del login, así que exponer la página de login no es en sí un problema de seguridad — pero es bueno saberlo de antemano.
+
+---
+
+## Instalar como app (PWA)
+
+El sitio trae `manifest.json` + un service worker mínimo (`sw.js`) para poder instalarse como app, sin pasar por ninguna tienda:
+
+- **Android / Chrome de escritorio**: menú del navegador → "Instalar app" (o el ícono ⊕ en la barra de direcciones).
+- **iPhone (Safari)**: botón compartir → "Agregar a pantalla de inicio".
+
+Queda con ícono propio y abre en su propia ventana, sin barra de navegador — el reemplazo directo del `.exe` viejo, pero sin instalar nada de verdad. El service worker **no cachea datos** a propósito (`sw.js` solo existe para cumplir el requisito técnico de instalabilidad) — los datos de Odoo siempre se piden en vivo, nunca vas a ver algo desactualizado por caché.
+
+Los íconos están en `icons/` (generados una vez, no hace falta regenerarlos salvo que quieras cambiar el diseño).
+
+---
+
+## Mantener el backend despierto
+
+Render free duerme el servicio tras ~15 min sin tráfico (ver [limitaciones](#desplegar-el-backend-en-render)). El workflow [`.github/workflows/keep-warm.yml`](.github/workflows/keep-warm.yml) le hace un ping a `/` cada 12 minutos en horario laboral aproximado (11:00-23:59 UTC, lunes a viernes) para que nunca llegue a dormirse mientras lo estás usando — se activa solo con GitHub Actions, no requiere ninguna cuenta externa.
+
+- Si el horario no coincide con el tuyo, ajustá el rango de horas en el `cron:` del archivo (está en UTC, no en hora local).
+- Diseñado para quedar por debajo de los 2000 minutos/mes gratis que da GitHub Actions en repos privados (~1400 min/mes con este esquema) — si lo hacés correr más seguido o más horas, revisá que no te pases.
+- Podés dispararlo a mano desde la pestaña **Actions** del repo (`workflow_dispatch`) para probarlo sin esperar al próximo horario.
 
 ---
 
@@ -176,6 +201,13 @@ subir_horas/
 │   └── style.css          # estilos de index.html
 ├── js/
 │   └── app.js              # lógica del frontend (fetch al backend, UI)
+├── manifest.json           # metadata de la PWA (instalar como app)
+├── sw.js                   # service worker mínimo, sin caché de datos
+├── icons/                  # íconos de la PWA (192/512/180/32/16 px)
+├── favicon.ico
+├── .github/
+│   └── workflows/
+│       └── keep-warm.yml  # ping periódico a Render para que no se duerma
 ├── backend_odoo.py        # API Flask, login + intermediario con Odoo (se despliega en Render)
 ├── crear_usuario.py       # CLI para crear/resetear usuarios
 ├── requirements.txt       # dependencias del backend

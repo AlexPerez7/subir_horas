@@ -1,0 +1,14 @@
+{
+  "name": "Registro de horas · Odoo",
+  "short_name": "Registro horas",
+  "description": "Registro de horas de trabajo directo en Odoo (GER_Producción Varios NF).",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0F1417",
+  "theme_color": "#0F1417",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

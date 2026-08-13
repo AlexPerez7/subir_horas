@@ -3,6 +3,11 @@ const TOKEN_KEY = 'registro_horas_token';
 let ES_ADMIN = false;
 let MI_TARJETA = '';
 
+// Habilita "Instalar app" / "Agregar a pantalla de inicio" (PWA).
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js').catch(() => { /* no bloquea el uso normal si falla */ });
+}
+
 document.getElementById('fecha').valueAsDate = new Date();
 document.getElementById('fechaConsulta').valueAsDate = new Date();
 
@@ -353,12 +358,15 @@ function mostrarStatus(html, tipo){
   el.innerHTML = html;
 }
 
+let HISTORIAL_ACTUAL = [];
+
 async function cargarHistorial(){
   const tarjeta = tarjetaActual();
   const subtarea = document.getElementById('subtarea').value;
   document.getElementById('subtareaActual').textContent = subtarea || '—';
   const tbody = document.getElementById('tbodyOdoo');
   const totalEl = document.getElementById('totalSubtarea');
+  HISTORIAL_ACTUAL = [];
   if(!subtarea){ return; }
 
   tbody.innerHTML = '<tr><td colspan="3" class="empty">Cargando...</td></tr>';
@@ -383,6 +391,7 @@ async function cargarHistorial(){
     }
     totalEl.innerHTML = 'Total <b style="color:var(--accent)">' + data.total_horas.toFixed(1) + 'h</b>';
     renderChipsDescripcion(data.lineas);
+    HISTORIAL_ACTUAL = data.lineas;
   } catch(e){
     tbody.innerHTML = '<tr><td colspan="3" class="empty">Error cargando historial.</td></tr>';
   }
@@ -450,8 +459,33 @@ async function deshacer(id){
   }
 }
 
+function escaparCSV(valor){
+  const str = String(valor);
+  return /[",\r\n]/.test(str) ? '"' + str.replace(/"/g, '""') + '"' : str;
+}
+
 function exportarCSV(){
-  mostrarStatus('El respaldo CSV ahora se basa en el historial visible arriba; usa Odoo directamente para exportes completos.', '');
+  if(HISTORIAL_ACTUAL.length === 0){
+    mostrarStatus('No hay historial cargado para exportar todavía — elegí una subtarea con registros primero.', 'err');
+    return;
+  }
+
+  const subtarea = document.getElementById('subtareaActual').textContent;
+  const filas = [['Fecha', 'Horas', 'Descripción']];
+  HISTORIAL_ACTUAL.forEach(l => filas.push([l.date, l.unit_amount, l.name || '']));
+  const csv = '﻿' + filas.map(f => f.map(escaparCSV).join(',')).join('\r\n');
+
+  const blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'horas_' + subtarea.replace(/[^a-z0-9]+/gi, '_').toLowerCase() + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  mostrarStatus('CSV descargado (' + HISTORIAL_ACTUAL.length + ' fila' + (HISTORIAL_ACTUAL.length === 1 ? '' : 's') + ' — el historial visible arriba, no el total completo).', 'ok');
 }
 
 let LINEAS_DIA_ACTUAL = [];
