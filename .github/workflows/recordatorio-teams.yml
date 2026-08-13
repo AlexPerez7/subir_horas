@@ -28,6 +28,22 @@ jobs:
       - name: Avisar por Teams si falta cargar horas
         if: steps.consulta.outputs.pendiente == 'true'
         run: |
+          # La plantilla "Enviar alertas de webhook a un chat" espera el
+          # payload como una Adaptive Card directa (no envuelta en
+          # {"type":"message","attachments":[...]}) - el flujo la
+          # deserializa esperando "type": "AdaptiveCard" en la raíz.
           curl -fsS -X POST -H "Content-Type: application/json" \
-            -d "{\"text\": \"⏰ No tenés horas registradas el ${{ steps.consulta.outputs.fecha }}. ¿Se te olvidó cargarlas?\"}" \
-            "${{ secrets.TEAMS_WEBHOOK_URL }}"
+            --data @- "${{ secrets.TEAMS_WEBHOOK_URL }}" <<'EOF'
+          {
+            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+            "type": "AdaptiveCard",
+            "version": "1.4",
+            "body": [
+              {
+                "type": "TextBlock",
+                "text": "⏰ No tenés horas registradas el ${{ steps.consulta.outputs.fecha }}. ¿Se te olvidó cargarlas?",
+                "wrap": true
+              }
+            ]
+          }
+          EOF
