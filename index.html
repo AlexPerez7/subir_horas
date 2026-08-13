@@ -105,11 +105,13 @@
 
       <button class="primary" id="btnRegistrar" onclick="registrarEnOdoo()">Registrar en Odoo</button>
       <button class="ghost" onclick="exportarCSV()">Exportar CSV (respaldo local)</button>
+      <button class="ghost" onclick="exportarExcel()">Exportar Excel (.xls)</button>
       <div class="status" id="status"></div>
     </div>
 
     <div class="card">
       <h2>En Odoo · <span id="subtareaActual">—</span> <span class="hud" id="totalSubtarea" style="float:right"></span></h2>
+      <input type="text" id="buscarHistorial" placeholder="Buscar en descripción o fecha..." oninput="filtrarHistorial()" style="margin-bottom:12px;">
       <table>
         <thead>
           <tr><th style="width:16%">Fecha</th><th style="width:12%">Horas</th><th>Descripción</th></tr>

@@ -1,7 +1,11 @@
 const API_BASE = 'https://subir-horas.onrender.com';
 const TOKEN_KEY = 'registro_horas_token';
+const ULTIMA_TARJETA_KEY = 'registro_horas_ultima_tarjeta';
+const UMBRAL_HORAS_ALTAS = 9;
 let ES_ADMIN = false;
 let MI_TARJETA = '';
+
+function ultimaSubtareaKey(tarjeta){ return 'registro_horas_ultima_subtarea:' + tarjeta; }
 
 // Habilita "Instalar app" / "Agregar a pantalla de inicio" (PWA).
 if('serviceWorker' in navigator){
@@ -228,8 +232,8 @@ function _modalGenerico({titulo, mensaje, conInput, valorInicial, tipoInput, tex
   });
 }
 
-function confirmarAccion(mensaje, titulo){
-  return _modalGenerico({titulo: titulo || 'Confirmar', mensaje, textoAceptar: 'Eliminar'});
+function confirmarAccion(mensaje, titulo, textoAceptar){
+  return _modalGenerico({titulo: titulo || 'Confirmar', mensaje, textoAceptar: textoAceptar || 'Confirmar'});
 }
 
 function pedirTexto(mensaje, opciones){
@@ -365,9 +369,13 @@ async function cargarTarjetas(){
     const opciones = tarjetas.map(t => `<option value="${t.name}">${t.name}</option>`).join('');
     sel.innerHTML = opciones;
     // Como admin, el desplegable trae todas las tarjetas del proyecto:
-    // preseleccionamos la propia en vez de dejar que quede la primera
-    // de la lista (que es de quien sea que Odoo devuelva primero).
-    if(MI_TARJETA && tarjetas.some(t => t.name === MI_TARJETA)){
+    // preseleccionamos la última usada (si seguís logueado en el mismo
+    // navegador) o si no, la propia - en vez de dejar que quede la
+    // primera de la lista (que es de quien sea que Odoo devuelva primero).
+    const ultimaTarjeta = localStorage.getItem(ULTIMA_TARJETA_KEY);
+    if(ultimaTarjeta && tarjetas.some(t => t.name === ultimaTarjeta)){
+      sel.value = ultimaTarjeta;
+    } else if(MI_TARJETA && tarjetas.some(t => t.name === MI_TARJETA)){
       sel.value = MI_TARJETA;
     }
     const selNuevoUsuario = document.getElementById('nuevoUsuarioTarjeta');
@@ -466,7 +474,7 @@ async function resetearPasswordUsuario(username){
 }
 
 async function eliminarUsuarioAdmin(username){
-  const ok = await confirmarAccion('¿Eliminar el usuario "' + username + '"? Esta acción no se puede deshacer.', 'Eliminar usuario');
+  const ok = await confirmarAccion('¿Eliminar el usuario "' + username + '"? Esta acción no se puede deshacer.', 'Eliminar usuario', 'Eliminar');
   if(!ok) return;
   try{
     const res = await api('/api/usuarios/' + encodeURIComponent(username), { method: 'DELETE' });
@@ -491,14 +499,24 @@ async function cargarSubtareas(){
     const subtareas = await res.json();
     selSub.innerHTML = subtareas.map(s => `<option value="${s.name}">${s.name}</option>`).join('');
     selSub.disabled = false;
+    const ultimaSubtarea = localStorage.getItem(ultimaSubtareaKey(tarjeta));
+    if(ultimaSubtarea && subtareas.some(s => s.name === ultimaSubtarea)){
+      selSub.value = ultimaSubtarea;
+    }
     cargarHistorial();
   } catch(e){
     selSub.innerHTML = '<option>Error cargando subtareas</option>';
   }
 }
 
-document.getElementById('tarjeta').addEventListener('change', cargarSubtareas);
-document.getElementById('subtarea').addEventListener('change', cargarHistorial);
+document.getElementById('tarjeta').addEventListener('change', () => {
+  localStorage.setItem(ULTIMA_TARJETA_KEY, document.getElementById('tarjeta').value);
+  cargarSubtareas();
+});
+document.getElementById('subtarea').addEventListener('change', () => {
+  localStorage.setItem(ultimaSubtareaKey(tarjetaActual()), document.getElementById('subtarea').value);
+  cargarHistorial();
+});
 
 function mostrarStatus(html, tipo){
   const el = document.getElementById('status');
@@ -530,16 +548,12 @@ async function cargarHistorial(){
     if(data.lineas.length === 0){
       tbody.innerHTML = '<tr><td colspan="3" class="empty">Sin registros todavía en esta subtarea.</td></tr>';
     } else {
-      tbody.innerHTML = data.lineas.map(l => `
-        <tr>
-          <td class="desc">${formatearFecha(l.date)}</td>
-          <td class="hrs">${l.unit_amount.toFixed(2)}h</td>
-          <td class="desc">${l.name || '—'}</td>
-        </tr>`).join('');
+      renderFilasHistorial(data.lineas);
     }
     totalEl.innerHTML = 'Total <b style="color:var(--accent)">' + data.total_horas.toFixed(1) + 'h</b>';
     renderChipsDescripcion(data.lineas);
     HISTORIAL_ACTUAL = data.lineas;
+    document.getElementById('buscarHistorial').value = '';
   } catch(e){
     tbody.innerHTML = '<tr><td colspan="3" class="empty">Error cargando historial.</td></tr>';
   }
@@ -548,6 +562,28 @@ async function cargarHistorial(){
 function formatearFecha(iso){
   const [y,m,d] = iso.split('-');
   return d + '/' + m + '/' + y;
+}
+
+function renderFilasHistorial(lineas){
+  document.getElementById('tbodyOdoo').innerHTML = lineas.map(l => `
+    <tr>
+      <td class="desc">${formatearFecha(l.date)}</td>
+      <td class="hrs">${l.unit_amount.toFixed(2)}h</td>
+      <td class="desc">${l.name || '—'}</td>
+    </tr>`).join('');
+}
+
+function filtrarHistorial(){
+  if(HISTORIAL_ACTUAL.length === 0) return;
+  const q = document.getElementById('buscarHistorial').value.trim().toLowerCase();
+  const filtradas = !q ? HISTORIAL_ACTUAL : HISTORIAL_ACTUAL.filter(l =>
+    (l.name || '').toLowerCase().includes(q) || formatearFecha(l.date).includes(q)
+  );
+  if(filtradas.length === 0){
+    document.getElementById('tbodyOdoo').innerHTML = '<tr><td colspan="3" class="empty">Sin coincidencias.</td></tr>';
+  } else {
+    renderFilasHistorial(filtradas);
+  }
 }
 
 async function registrarEnOdoo(){
@@ -565,6 +601,10 @@ async function registrarEnOdoo(){
   if(!fecha || !horas || horas <= 0){
     mostrarStatus('Completa fecha y horas (> 0) antes de registrar.', 'err');
     return;
+  }
+  if(horas > UMBRAL_HORAS_ALTAS){
+    const seguro = await confirmarAccion('Vas a registrar ' + horas + ' horas el ' + formatearFecha(fecha) + '. ¿Es correcto? (parece un valor alto, revisá que no sea un error de tipeo)', 'Confirmar horas');
+    if(!seguro) return;
   }
 
   btn.disabled = true;
@@ -617,6 +657,10 @@ async function registrarEnLote(){
   if(!horas || horas <= 0){
     mostrarStatus('Completa las horas por día (> 0) antes de registrar.', 'err');
     return;
+  }
+  if(horas > UMBRAL_HORAS_ALTAS){
+    const seguro = await confirmarAccion('Vas a registrar ' + horas + ' horas en cada uno de los ' + dias.length + ' días del rango. ¿Es correcto? (parece un valor alto, revisá que no sea un error de tipeo)', 'Confirmar horas');
+    if(!seguro) return;
   }
 
   btn.disabled = true;
@@ -702,6 +746,53 @@ function exportarCSV(){
   mostrarStatus('CSV descargado (' + HISTORIAL_ACTUAL.length + ' fila' + (HISTORIAL_ACTUAL.length === 1 ? '' : 's') + ' — el historial visible arriba, no el total completo).', 'ok');
 }
 
+function escaparXML(valor){
+  return String(valor).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+}
+
+function exportarExcel(){
+  if(HISTORIAL_ACTUAL.length === 0){
+    mostrarStatus('No hay historial cargado para exportar todavía — elegí una subtarea con registros primero.', 'err');
+    return;
+  }
+
+  const subtarea = document.getElementById('subtareaActual').textContent;
+  const filas = HISTORIAL_ACTUAL.map(l => `
+   <Row>
+    <Cell><Data ss:Type="String">${escaparXML(formatearFecha(l.date))}</Data></Cell>
+    <Cell><Data ss:Type="Number">${l.unit_amount}</Data></Cell>
+    <Cell><Data ss:Type="String">${escaparXML(l.name || '')}</Data></Cell>
+   </Row>`).join('');
+
+  // Formato SpreadsheetML 2003: XML plano que Excel abre nativamente,
+  // sin necesitar ninguna librería externa para armar un .xlsx real.
+  const xml = '<?xml version="1.0"?>\n' +
+    '<?mso-application progid="Excel.Sheet"?>\n' +
+    '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">\n' +
+    ' <Worksheet ss:Name="Horas">\n' +
+    '  <Table>\n' +
+    '   <Row>\n' +
+    '    <Cell><Data ss:Type="String">Fecha</Data></Cell>\n' +
+    '    <Cell><Data ss:Type="String">Horas</Data></Cell>\n' +
+    '    <Cell><Data ss:Type="String">Descripción</Data></Cell>\n' +
+    '   </Row>' + filas + '\n' +
+    '  </Table>\n' +
+    ' </Worksheet>\n' +
+    '</Workbook>';
+
+  const blob = new Blob([xml], {type: 'application/vnd.ms-excel;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'horas_' + subtarea.replace(/[^a-z0-9]+/gi, '_').toLowerCase() + '.xls';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  mostrarStatus('Excel descargado (' + HISTORIAL_ACTUAL.length + ' fila' + (HISTORIAL_ACTUAL.length === 1 ? '' : 's') + '). Excel puede avisar que el formato no coincide con la extensión — es normal, dale "Sí, abrir de todas formas".', 'ok');
+}
+
 let LINEAS_DIA_ACTUAL = [];
 let SUBTAREAS_CACHE = null;
 
@@ -768,7 +859,7 @@ function renderTablaDia(){
 }
 
 async function eliminarLineaDia(id){
-  const ok = await confirmarAccion('¿Eliminar esta entrada? Esta acción no se puede deshacer.', 'Eliminar entrada');
+  const ok = await confirmarAccion('¿Eliminar esta entrada? Esta acción no se puede deshacer.', 'Eliminar entrada', 'Eliminar');
   if(!ok) return;
   try{
     const res = await api('/api/timesheet/' + id + '?tarjeta=' + encodeURIComponent(tarjetaActual()), { method: 'DELETE' });
@@ -808,6 +899,11 @@ async function guardarEdicion(id){
   const subtarea = document.getElementById('edit-subtarea-' + id).value;
   const horas = parseFloat(document.getElementById('edit-horas-' + id).value);
   const detalle = document.getElementById('edit-detalle-' + id).value.trim();
+
+  if(horas > UMBRAL_HORAS_ALTAS){
+    const seguro = await confirmarAccion('Vas a dejar esta entrada en ' + horas + ' horas. ¿Es correcto? (parece un valor alto, revisá que no sea un error de tipeo)', 'Confirmar horas');
+    if(!seguro) return;
+  }
 
   try{
     const res = await api('/api/timesheet/' + id, {
