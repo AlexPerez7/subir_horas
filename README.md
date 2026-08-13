@@ -9,6 +9,7 @@ Consiste en un formulario web estático (publicado en **GitHub Pages**) conectad
 ## Índice
 
 - [Arquitectura](#arquitectura)
+- [Funcionalidades del formulario](#funcionalidades-del-formulario)
 - [Requisitos](#requisitos)
 - [Configuración inicial](#configuración-inicial)
 - [Modo desarrollo (local)](#modo-desarrollo-local)
@@ -16,7 +17,7 @@ Consiste en un formulario web estático (publicado en **GitHub Pages**) conectad
 - [Publicar el frontend en GitHub Pages](#publicar-el-frontend-en-github-pages)
 - [Instalar como app (PWA)](#instalar-como-app-pwa)
 - [Mantener el backend despierto](#mantener-el-backend-despierto)
-- [Recordatorio por Telegram](#recordatorio-por-telegram)
+- [Recordatorio y resumen por Telegram](#recordatorio-y-resumen-por-telegram)
 - [Gestión de usuarios](#gestión-de-usuarios)
 - [Flujo de actualización](#flujo-de-actualización)
 - [Estructura del proyecto](#estructura-del-proyecto)
@@ -44,6 +45,21 @@ Consiste en un formulario web estático (publicado en **GitHub Pages**) conectad
 - **`crear_usuario.py`** — CLI para crear cuentas o resetear contraseñas en `usuarios.db`. Se corre del lado del backend desplegado (ver [Gestión de usuarios](#gestión-de-usuarios)).
 
 Como el frontend y el backend viven en dominios distintos (`*.github.io` vs `*.onrender.com`), la comunicación es cross-origin. La autenticación **no usa cookies**: muchos navegadores (Safari, Brave, Samsung Internet, y cada vez más) bloquean por defecto las cookies "de terceros" aunque tengan `SameSite=None; Secure`, lo que rompería el login. En cambio, `/api/login` devuelve un token firmado que el frontend guarda en `localStorage` y manda como header `Authorization: Bearer <token>` en cada pedido — no depende de ninguna política de cookies del navegador. El backend restringe CORS al origen exacto del sitio de GitHub Pages.
+
+---
+
+## Funcionalidades del formulario
+
+Además de cargar/editar/eliminar horas y ver el historial en vivo:
+
+- **Resumen y gráficos**: total de horas de la semana y del mes actual, un gráfico de barras con las horas por subtarea de la semana, y un heatmap de actividad de los últimos 30 días.
+- **Carga en lote**: tildando "Cargar el mismo registro en varios días" se puede elegir un rango de fechas y repetir la misma subtarea/horas/descripción en cada día hábil del rango — útil para cargar retroactivamente una semana completa.
+- **Buscador** en el historial de la subtarea, por descripción o fecha.
+- **Aviso de horas altas**: si se registran o editan más de 9 horas en una entrada, pide confirmación extra antes de guardar (para atajar errores de tipeo).
+- **Exportar** el historial visible a CSV o a Excel (`.xls`, formato SpreadsheetML — Excel puede avisar que el formato no coincide con la extensión, es normal, hay que abrirlo igual).
+- **Se recuerda la última tarjeta/subtarea** usada (en `localStorage` del navegador), para no reseleccionar en cada sesión.
+- **Indicador de conectividad** con el backend (conectando / despertando / conectado / sin conexión) en el header, y **aviso cuando la sesión está por expirar** (10 minutos antes), en vez de enterarte recién cuando falla una acción.
+- Los diálogos de confirmación/alerta son **modales propios** de la app, no los nativos del navegador (`confirm()`/`alert()`).
 
 ---
 
@@ -138,9 +154,14 @@ Render free duerme el servicio tras ~15 min sin tráfico (ver [limitaciones](#de
 
 ---
 
-## Recordatorio por Telegram
+## Recordatorio y resumen por Telegram
 
-El banner que aparece dentro de la app ("no cargaste ayer") solo lo ves si la abrís. El workflow [`.github/workflows/recordatorio-telegram.yml`](.github/workflows/recordatorio-telegram.yml) hace lo mismo pero de forma proactiva: todas las mañanas de un día hábil consulta al backend y, si falta cargar el día hábil anterior, manda un mensaje por Telegram.
+El banner que aparece dentro de la app ("no cargaste ayer") solo lo ves si la abrís. Dos workflows lo complementan de forma proactiva, mandando mensajes por Telegram sin que tengas que abrir el sitio:
+
+- [`.github/workflows/recordatorio-telegram.yml`](.github/workflows/recordatorio-telegram.yml) — todas las mañanas de un día hábil consulta al backend y, si falta cargar el día hábil anterior, manda un aviso.
+- [`.github/workflows/resumen-semanal-telegram.yml`](.github/workflows/resumen-semanal-telegram.yml) — todos los viernes manda un resumen con el total de horas de la semana y el detalle por subtarea (usa `/api/resumen-semanal-cron`, protegido por el mismo `CRON_SECRET`).
+
+Ambos reusan los mismos tres secrets (`CRON_SECRET`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`) — configurando el primero, el segundo ya queda funcionando.
 
 (Antes se probó con un webhook de Microsoft Teams, pero la plantilla de Power Automate falla con "Call made for a thread which is not a ChatThread" cuando el destino es un chat contigo mismo — es una limitación de esa plantilla, no del payload. Telegram evita todo ese problema: es un solo `curl` sin OAuth ni flujos intermedios.)
 
@@ -169,7 +190,7 @@ En el repo: **Settings → Secrets and variables → Actions → New repository 
 
 **4. Probar**
 
-Pestaña **Actions → Recordatorio de horas por Telegram → Run workflow**. Si los tres secrets están bien cargados, el job debería pasar en verde (y mandar el aviso por Telegram si de verdad te falta cargar el día hábil anterior). Mientras no los cargues, este workflow va a fallar — es el comportamiento esperado hasta terminar de configurarlo, no un bug.
+Pestaña **Actions → Recordatorio de horas por Telegram → Run workflow** (y lo mismo para **Resumen semanal de horas por Telegram**). Si los tres secrets están bien cargados, el job debería pasar en verde. Mientras no los cargues, estos workflows van a fallar — es el comportamiento esperado hasta terminar de configurarlos, no un bug.
 
 ---
 
@@ -184,6 +205,8 @@ Si tu cuenta es admin, al loguearte ves una sección **Usuarios** con:
 - Formulario para crear un usuario nuevo: usuario, tarjeta (elegís de la misma lista que ve el selector principal), contraseña inicial, y un checkbox "Es administrador".
 
 Por detrás usa los endpoints `GET/POST /api/usuarios`, `POST /api/usuarios/<user>/resetear-password` y `DELETE /api/usuarios/<user>` — todos devuelven 403 si la sesión no es admin. Un admin no puede eliminarse a sí mismo (para no quedarse afuera por accidente).
+
+Debajo del panel hay una tabla de **auditoría** (`GET /api/auditoria`, también solo admin) con las últimas 50 acciones: quién creó/eliminó un usuario o reseteó una contraseña, y cuándo. Como el resto de `usuarios.db`, se resetea en cada redeploy de Render free — sirve para auditar entre deploys, no como historial permanente.
 
 ### Bootstrap: el primer admin
 
@@ -243,8 +266,9 @@ subir_horas/
 ├── favicon.ico
 ├── .github/
 │   └── workflows/
-│       ├── keep-warm.yml            # ping periódico a Render para que no se duerma
-│       └── recordatorio-telegram.yml # avisa por Telegram si falta cargar horas
+│       ├── keep-warm.yml                # ping periódico a Render para que no se duerma
+│       ├── recordatorio-telegram.yml    # avisa por Telegram si falta cargar horas
+│       └── resumen-semanal-telegram.yml # resumen semanal por Telegram (todos los viernes)
 ├── backend_odoo.py        # API Flask, login + intermediario con Odoo (se despliega en Render)
 ├── crear_usuario.py       # CLI para crear/resetear usuarios
 ├── requirements.txt       # dependencias del backend
@@ -264,6 +288,7 @@ subir_horas/
 - Si el token llegara a exponerse accidentalmente (capturas, commit erróneo, etc.), hay que **rotarlo** en Odoo lo antes posible.
 - `usuarios.db` guarda contraseñas **hasheadas** (`werkzeug.security`), nunca en texto plano — aun así, nunca se sube a git.
 - CORS en el backend está restringido a los orígenes listados en `FRONTEND_ORIGINS` (no `CORS(app)` abierto). Si en algún momento agregás otro dominio desde el que se sirva el frontend, hay que sumarlo ahí.
+- El login se bloquea 5 minutos para un usuario tras 5 intentos fallidos seguidos (mitiga fuerza bruta básica). El contador vive en memoria del proceso — se resetea en cada redeploy, y solo funciona porque el `Procfile` corre un único worker de gunicorn (si en algún momento se agregan más workers, este esquema necesitaría un store compartido tipo Redis).
 - El login usa un **token firmado** (`itsdangerous`, con `SECRET_KEY`), no una cookie — se eligió así porque las cookies cross-site (`SameSite=None; Secure`) quedan bloqueadas por defecto en varios navegadores (Safari, Brave, Samsung Internet). El token vive en `localStorage` del navegador y viaja en el header `Authorization`. Expira solo a las `SESSION_LIFETIME_HORAS` de haberse emitido (no hay forma de invalidarlo antes de tiempo del lado del servidor — es la contra de no guardar estado de sesión; "cerrar sesión" simplemente lo borra del navegador). Si se filtra un token, expira solo; si hace falta invalidar algo antes, hay que rotar `SECRET_KEY` (invalida *todos* los tokens activos, no solo uno).
 - El sitio publicado en GitHub Pages es **público en internet** aunque el repositorio sea privado (ver nota en [Publicar el frontend](#publicar-el-frontend-en-github-pages)). El login es lo único que protege el acceso a los datos de horas.
 - El empleado de cada línea de horas se resuelve automáticamente según quién está **asignado a la subtarea** (`project.task.user_ids`), no según qué usuario de la app hizo el request. Esto permite, técnicamente, cargar horas "a nombre de" cualquier persona con tarjeta en el proyecto si sos admin — usar esa capacidad con criterio.
