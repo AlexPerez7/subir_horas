@@ -172,6 +172,30 @@
       <h2>Días sin cargar horas · este mes</h2>
       <div id="listaFaltantesMes"><p class="empty">Cargando...</p></div>
     </div>
+
+    <div class="card">
+      <h2>Ver día completo</h2>
+      <div class="row2" style="align-items:end;">
+        <div>
+          <label for="fechaConsulta">Fecha a consultar</label>
+          <input type="date" id="fechaConsulta">
+        </div>
+        <div>
+          <button class="primary" style="margin-top:0;" onclick="consultarDia()">Ver horas de ese día</button>
+        </div>
+      </div>
+      <div class="tabla-scroll" style="margin-top:16px;">
+        <table>
+          <thead>
+            <tr><th style="width:26%">Subtarea</th><th style="width:12%">Horas</th><th>Descripción</th><th style="width:90px"></th></tr>
+          </thead>
+          <tbody id="tbodyDia">
+            <tr><td colspan="4" class="empty">Elige una fecha y presiona "Ver horas de ese día".</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="status" id="totalDia" style="margin-top:10px;"></div>
+    </div>
   </div>
 
   <div class="note">
@@ -181,30 +205,6 @@
 
   <div id="tabDias" class="tab-panel" style="margin-top:20px;">
   <div class="card">
-    <h2>Ver día completo</h2>
-    <div class="row2" style="align-items:end;">
-      <div>
-        <label for="fechaConsulta">Fecha a consultar</label>
-        <input type="date" id="fechaConsulta">
-      </div>
-      <div>
-        <button class="primary" style="margin-top:0;" onclick="consultarDia()">Ver horas de ese día</button>
-      </div>
-    </div>
-    <div class="tabla-scroll" style="margin-top:16px;">
-      <table>
-        <thead>
-          <tr><th style="width:26%">Subtarea</th><th style="width:12%">Horas</th><th>Descripción</th><th style="width:90px"></th></tr>
-        </thead>
-        <tbody id="tbodyDia">
-          <tr><td colspan="4" class="empty">Elige una fecha y presiona "Ver horas de ese día".</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <div class="status" id="totalDia" style="margin-top:10px;"></div>
-  </div>
-
-  <div class="card" style="margin-top:20px;">
     <h2>Días sin cargar horas</h2>
     <div class="row2" style="align-items:end;">
       <div>
