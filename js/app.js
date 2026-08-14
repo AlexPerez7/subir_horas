@@ -105,6 +105,7 @@ async function inicializar(){
   verificarRecordatorio();
   cargarResumen();
   cargarHeatmap();
+  cargarFaltantesMes();
 }
 
 // En mobile el avatar abre un menú desplegable con las acciones de cuenta
@@ -264,6 +265,34 @@ async function cargarHeatmap(){
     cont.innerHTML = celdas.join('');
   } catch(e){
     cont.innerHTML = '<p class="empty">No se pudo cargar la actividad reciente.</p>';
+  }
+}
+
+function primerDiaDelMesISO(){
+  const hoy = new Date();
+  return hoy.getFullYear() + '-' + String(hoy.getMonth() + 1).padStart(2, '0') + '-01';
+}
+
+async function cargarFaltantesMes(){
+  const cont = document.getElementById('listaFaltantesMes');
+  try{
+    const tarjeta = tarjetaActual();
+    const url = '/api/dias-faltantes?desde=' + primerDiaDelMesISO() + '&tarjeta=' + encodeURIComponent(tarjeta);
+    const res = await api(url);
+    const data = await res.json();
+
+    if(data.error){
+      cont.innerHTML = '<p class="empty">' + data.error + '</p>';
+      return;
+    }
+    if(data.faltantes.length === 0){
+      cont.innerHTML = '<p class="status ok">Al día con este mes ✔</p>';
+      return;
+    }
+    cont.innerHTML = '<div class="status err">' + data.faltantes.length + ' día(s) sin horas cargadas este mes:</div><div class="chips" style="margin-top:8px;">' +
+      data.faltantes.map(f => `<button type="button" class="chip" onclick="irACargarFecha('${f}')">${formatearFecha(f)}</button>`).join('') + '</div>';
+  } catch(e){
+    cont.innerHTML = '<p class="empty">No se pudo revisar los días del mes.</p>';
   }
 }
 
@@ -666,6 +695,7 @@ async function cargarSubtareas(){
       selSub.value = ultimaSubtarea;
     }
     cargarHistorial();
+    cargarFaltantesMes();
   } catch(e){
     selSub.innerHTML = '<option>Error cargando subtareas</option>';
   }
@@ -792,6 +822,7 @@ async function registrarEnOdoo(){
     cargarHistorial();
     cargarResumen();
     cargarHeatmap();
+    cargarFaltantesMes();
   } catch(e){
     mostrarStatus('No se pudo conectar al backend: ' + e.message, 'err');
   } finally {
@@ -844,6 +875,7 @@ async function registrarEnLote(){
         cargarHistorial();
         cargarResumen();
         cargarHeatmap();
+        cargarFaltantesMes();
         return;
       }
       creados++;
@@ -853,6 +885,7 @@ async function registrarEnLote(){
       cargarHistorial();
       cargarResumen();
       cargarHeatmap();
+      cargarFaltantesMes();
       return;
     }
   }
@@ -864,6 +897,7 @@ async function registrarEnLote(){
   cargarHistorial();
   cargarResumen();
   cargarHeatmap();
+  cargarFaltantesMes();
 }
 
 async function deshacer(id){
@@ -876,6 +910,7 @@ async function deshacer(id){
       cargarHistorial();
       cargarResumen();
       cargarHeatmap();
+      cargarFaltantesMes();
     } else {
       mostrarStatus('No se pudo deshacer.', 'err');
     }
@@ -1038,6 +1073,7 @@ async function eliminarLineaDia(id){
     consultarDia();
     cargarResumen();
     cargarHeatmap();
+    cargarFaltantesMes();
   } catch(e){
     await mostrarAlerta('No se pudo conectar al backend: ' + e.message);
   }
@@ -1087,6 +1123,7 @@ async function guardarEdicion(id){
     consultarDia();
     cargarResumen();
     cargarHeatmap();
+    cargarFaltantesMes();
   } catch(e){
     await mostrarAlerta('No se pudo conectar al backend: ' + e.message);
   }

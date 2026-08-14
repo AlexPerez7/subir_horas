@@ -629,13 +629,31 @@ def timesheet_dia():
 def dias_faltantes():
     """
     Uso: /api/dias-faltantes?dias=10
-    Revisa los últimos N días hábiles (lun-vie) y devuelve cuáles NO
-    tienen ninguna hora registrada, para la tarjeta del usuario.
+      o: /api/dias-faltantes?desde=2026-08-01
+    Con 'dias', revisa los últimos N días hábiles antes de hoy. Con
+    'desde', revisa los días hábiles desde esa fecha hasta ayer (p.ej.
+    para "días sin cargar horas en lo que va del mes"). Devuelve
+    cuáles no tienen ninguna hora registrada, para la tarjeta del usuario.
     """
     tarjeta = tarjeta_de_la_request(request.args)
-    n = int(request.args.get("dias", 10))
+    desde_str = request.args.get("desde")
 
-    dias_a_revisar = dias_habiles_atras(n)
+    if desde_str:
+        try:
+            desde = date.fromisoformat(desde_str)
+        except ValueError:
+            return jsonify({"error": "Formato de fecha inválido en 'desde' (usar AAAA-MM-DD)."}), 400
+        hoy = date.today()
+        dias_a_revisar = []
+        d = desde
+        while d < hoy:
+            if d.weekday() < 5:
+                dias_a_revisar.append(d)
+            d += timedelta(days=1)
+    else:
+        n = int(request.args.get("dias", 10))
+        dias_a_revisar = dias_habiles_atras(n)
+
     if not dias_a_revisar:
         return jsonify({"faltantes": []})
 
