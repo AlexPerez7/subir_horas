@@ -27,9 +27,29 @@
 </div>
 
 <div id="appRoot" style="display:none;">
+<nav class="sidebar" id="sidebar">
+  <div class="sidebar-brand">
+    <span class="eyebrow">GER_Produccion Varios NF</span>
+    <h1>Registro de horas</h1>
+  </div>
+  <div class="sidebar-nav">
+    <button type="button" data-tab="registrar" onclick="mostrarTab('registrar')">
+      <span class="tabbar-icono">📝</span><span>Registrar</span>
+    </button>
+    <button type="button" data-tab="resumen" onclick="mostrarTab('resumen')">
+      <span class="tabbar-icono">📊</span><span>Resumen</span>
+    </button>
+    <button type="button" data-tab="dias" onclick="mostrarTab('dias')">
+      <span class="tabbar-icono">📅</span><span>Días</span>
+    </button>
+    <button type="button" data-tab="admin" id="sidebarAdminBtn" onclick="mostrarTab('admin')" style="display:none;">
+      <span class="tabbar-icono">⚙️</span><span>Admin</span>
+    </button>
+  </div>
+</nav>
 <div class="wrap">
   <header>
-    <div>
+    <div class="header-brand">
       <span class="eyebrow">GER_Produccion Varios NF</span>
       <h1>Registro de horas</h1>
     </div>

@@ -66,7 +66,10 @@ async function inicializar(){
   MI_TARJETA = yo.tarjeta;
 
   document.getElementById('loginBox').style.display = 'none';
-  document.getElementById('appRoot').style.display = 'block';
+  // '' (no 'block'): un valor inline fijo le ganaría en especificidad al
+  // "display:flex" que el media query de desktop le pone a #appRoot para
+  // el layout con sidebar, y la app quedaría en blanco en pantallas anchas.
+  document.getElementById('appRoot').style.display = '';
   iniciarMonitoreoBackend();
 
   document.getElementById('userbox').innerHTML =
@@ -129,7 +132,6 @@ function wireAvatarMenu(){
 let TAB_ACTIVA = 'registrar';
 
 function actualizarVisibilidadTabs(){
-  const esMobile = window.matchMedia('(max-width: 820px)').matches;
   const paneles = {
     resumen: document.getElementById('tabResumen'),
     registrar: document.getElementById('tabRegistrar'),
@@ -140,10 +142,11 @@ function actualizarVisibilidadTabs(){
     const el = paneles[nombre];
     if(!el) return;
     if(nombre === 'admin' && !ES_ADMIN){ el.style.display = 'none'; return; }
-    el.style.display = (!esMobile || nombre === TAB_ACTIVA) ? '' : 'none';
+    el.style.display = (nombre === TAB_ACTIVA) ? '' : 'none';
   });
   document.getElementById('tabbarAdminBtn').style.display = ES_ADMIN ? '' : 'none';
-  document.querySelectorAll('#tabbar button').forEach(b => {
+  document.getElementById('sidebarAdminBtn').style.display = ES_ADMIN ? '' : 'none';
+  document.querySelectorAll('#tabbar button, .sidebar-nav button').forEach(b => {
     b.classList.toggle('activo', b.dataset.tab === TAB_ACTIVA);
   });
 }
@@ -153,8 +156,6 @@ function mostrarTab(nombre){
   actualizarVisibilidadTabs();
   window.scrollTo(0, 0);
 }
-
-window.addEventListener('resize', actualizarVisibilidadTabs);
 
 let _intervaloBackend = null;
 let _timeoutDespertando = null;
