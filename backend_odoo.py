@@ -858,6 +858,17 @@ def _quitar_acentos(texto):
 
 _RE_HORAS = re.compile(r"(\d+(?:[.,]\d+)?)\s*h(?:s\.?|oras?)?\b", re.IGNORECASE)
 _RE_FECHA_DDMM = re.compile(r"\b(\d{1,2})[/-](\d{1,2})\b")
+_MESES = {
+    "enero": 1, "febrero": 2, "marzo": 3, "abril": 4, "mayo": 5, "junio": 6,
+    "julio": 7, "agosto": 8, "septiembre": 9, "setiembre": 9, "octubre": 10,
+    "noviembre": 11, "diciembre": 12,
+}
+_DIAS_SEMANA = {
+    "lunes": 0, "martes": 1, "miercoles": 2, "jueves": 3,
+    "viernes": 4, "sabado": 5, "domingo": 6,
+}
+_RE_FECHA_DIA_MES = re.compile(r"\b(\d{1,2})\s+de\s+(" + "|".join(_MESES) + r")\b")
+_RE_DIA_SEMANA = re.compile(r"\b(" + "|".join(_DIAS_SEMANA) + r")\b")
 _DISPARADORES_FALTANTES = (
     "falta", "sin cargar", "sin subir", "sin horas",
     "no he subido", "no subi", "no cargue", "no cargu", "no cargado",
@@ -877,9 +888,21 @@ def _parsear_horas(texto):
     return horas, resto
 
 
-def _parsear_fecha(texto):
-    """Busca 'hoy', 'ayer' o una fecha dd/mm en el texto.
-    Devuelve (fecha_iso, texto_sin_ese_pedazo); si no encuentra nada, asume hoy."""
+def _fecha_de_dia_semana(nombre):
+    """Última fecha (hoy inclusive) que cayó en ese día de la semana - "el
+    martes" siempre se refiere a un martes ya pasado (o a hoy), nunca a uno
+    futuro, porque esto es para consultar horas ya cargadas."""
+    objetivo = _DIAS_SEMANA[nombre]
+    d = date.today()
+    while d.weekday() != objetivo:
+        d -= timedelta(days=1)
+    return d
+
+
+def _intentar_parsear_fecha(texto):
+    """Busca 'hoy', 'ayer', un día de la semana ('martes'), 'dd de <mes>'
+    o una fecha dd/mm en el texto. Devuelve (fecha_iso, texto_sin_ese_pedazo)
+    o (None, texto) si no encuentra ninguna fecha explícita."""
     sin_acentos = _quitar_acentos(texto.lower())
 
     m = re.search(r"\bhoy\b", sin_acentos)
@@ -891,15 +914,36 @@ def _parsear_fecha(texto):
         ayer = date.today() - timedelta(days=1)
         return ayer.isoformat(), (texto[:m.start()] + texto[m.end():]).strip(" :-,.")
 
+    m = _RE_FECHA_DIA_MES.search(sin_acentos)
+    if m:
+        try:
+            f = date(date.today().year, _MESES[m.group(2)], int(m.group(1)))
+            return f.isoformat(), (texto[:m.start()] + texto[m.end():]).strip(" :-,.")
+        except ValueError:
+            pass  # "31 de febrero" y similares - se ignora
+
+    m = _RE_DIA_SEMANA.search(sin_acentos)
+    if m:
+        f = _fecha_de_dia_semana(m.group(1))
+        return f.isoformat(), (texto[:m.start()] + texto[m.end():]).strip(" :-,.")
+
     m = _RE_FECHA_DDMM.search(texto)
     if m:
         try:
             f = date(date.today().year, int(m.group(2)), int(m.group(1)))
             return f.isoformat(), (texto[:m.start()] + texto[m.end():]).strip(" :-,.")
         except ValueError:
-            pass  # "32/13" y similares - se ignora y se sigue con hoy
+            pass  # "32/13" y similares - se ignora
 
-    return date.today().isoformat(), texto
+    return None, texto
+
+
+def _parsear_fecha(texto):
+    """Como _intentar_parsear_fecha, pero si no encuentra ninguna fecha
+    explícita asume hoy - lo usa el registro de horas, donde no mencionar
+    una fecha es válido (significa "hoy")."""
+    fecha, resto = _intentar_parsear_fecha(texto)
+    return fecha or date.today().isoformat(), resto
 
 
 def _teclado_subtareas(tarjeta):
@@ -914,6 +958,7 @@ def _texto_ayuda():
         "Hola 👋 Puedo ayudarte con:\n"
         "/resumen — horas de esta semana y este mes\n"
         "/faltantes — días hábiles sin cargar\n"
+        "\"qué horas cargué el martes\" o \"el 14 de agosto\" — detalle de un día puntual\n"
         "\"2h hoy: reunión con cliente\" — registra horas (elegís la subtarea con botones)"
     )
 
@@ -923,6 +968,34 @@ def _texto_resumen(tarjeta):
     detalle = "\n".join(f"- {s['subtarea']}: {s['horas']:.1f}h" for s in r["por_subtarea"])
     detalle = detalle or "(sin horas cargadas esta semana)"
     return f"📊 Esta semana: {r['semana']:.1f}h · Este mes: {r['mes']:.1f}h\n\n{detalle}"
+
+
+def _texto_dia(tarjeta, fecha_iso):
+    """Detalle de las líneas cargadas en una fecha puntual - mismo dato que
+    la pestaña "Días" de la app (/api/timesheet/dia), pero como texto."""
+    bonita = datetime.strptime(fecha_iso, "%Y-%m-%d").strftime("%d/%m")
+    task_ids = subtareas_ids_de_tarjeta(tarjeta)
+    if not task_ids:
+        return "No encontré subtareas para tu tarjeta."
+
+    lineas = odoo_execute_kw(
+        "account.analytic.line", "search_read",
+        [[["task_id", "in", task_ids], ["date", "=", fecha_iso]]],
+        {"fields": ["task_id", "name", "unit_amount"], "order": "id asc"},
+    )
+    if not lineas:
+        return f"📭 No tenés horas cargadas el {bonita}."
+
+    ids_unicos = list({l["task_id"][0] for l in lineas})
+    tareas = odoo_execute_kw("project.task", "read", [ids_unicos], {"fields": ["name"]})
+    nombres = {t["id"]: t["name"] for t in tareas}
+
+    total = sum(l["unit_amount"] for l in lineas)
+    detalle = "\n".join(
+        f"- {nombres.get(l['task_id'][0], l['task_id'][1])}: {l['unit_amount']:.1f}h — {l['name']}"
+        for l in lineas
+    )
+    return f"🗓️ {bonita}: {total:.1f}h\n\n{detalle}"
 
 
 def _texto_faltantes(tarjeta):
@@ -980,6 +1053,13 @@ def _procesar_mensaje_telegram(texto, chat_id, tarjeta):
             return "No encontré subtareas para tu tarjeta.", None
         PENDIENTES_TELEGRAM[chat_id] = {"etapa": "elegir_subtarea", "fecha": fecha, "horas": horas, "detalle": detalle}
         return "¿En qué subtarea? 👇", teclado
+
+    # Una fecha explícita ("el martes", "14 de agosto") es más específica
+    # que las palabras sueltas de "días faltantes" o "resumen" de abajo -
+    # si el mensaje la menciona, gana la consulta del día puntual.
+    fecha_explicita, _ = _intentar_parsear_fecha(texto)
+    if fecha_explicita:
+        return _texto_dia(tarjeta, fecha_explicita), None
 
     if any(p in normalizado for p in _DISPARADORES_FALTANTES):
         return _texto_faltantes(tarjeta)
