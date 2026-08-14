@@ -42,7 +42,9 @@ Variables de entorno esperadas (.env, NUNCA subir a git; ver .env.example):
 """
 
 import os
+import re
 import sqlite3
+import sys
 import time
 import unicodedata
 from datetime import date, datetime, timedelta
@@ -435,15 +437,20 @@ def obtener_project_ids():
     )
 
 
-def subtareas_ids_de_tarjeta(tarjeta):
+def subtareas_de_tarjeta(tarjeta):
     project_ids = obtener_project_ids()
     return odoo_execute_kw(
-        "project.task", "search",
+        "project.task", "search_read",
         [[
             ["project_id", "in", project_ids],
             ["parent_id.name", "=", tarjeta],
         ]],
+        {"fields": ["id", "name"]},
     )
+
+
+def subtareas_ids_de_tarjeta(tarjeta):
+    return [t["id"] for t in subtareas_de_tarjeta(tarjeta)]
 
 
 def buscar_tarea_id(nombre_subtarea, tarjeta):
@@ -532,16 +539,7 @@ def listar_tarjetas():
 @app.route("/api/subtareas", methods=["GET"])
 def listar_subtareas():
     tarjeta = tarjeta_de_la_request(request.args)
-    project_ids = obtener_project_ids()
-    tareas = odoo_execute_kw(
-        "project.task", "search_read",
-        [[
-            ["project_id", "in", project_ids],
-            ["parent_id.name", "=", tarjeta],
-        ]],
-        {"fields": ["id", "name"]},
-    )
-    return jsonify(tareas)
+    return jsonify(subtareas_de_tarjeta(tarjeta))
 
 
 @app.route("/api/campos", methods=["GET"])
@@ -789,71 +787,246 @@ def resumen_semanal_cron():
 #
 # A diferencia de los dos endpoints -cron de arriba (empujan un mensaje
 # por un job periódico de GitHub Actions), esto es un webhook: Telegram
-# le pega un POST a esta URL cada vez que alguien le escribe al bot
-# (configurado una única vez con el método setWebhook de la Bot API,
-# ver README). No usa sesión de la app ni CRON_SECRET - se protege con
-# el secret_token propio de Telegram (header X-Telegram-Bot-Api-Secret-
-# Token) más un chequeo de que el chat sea el tuyo (TELEGRAM_CHAT_ID),
-# para que nadie más pueda hacerle preguntas al bot y ver tus horas.
+# le pega un POST a esta URL cada vez que alguien le escribe al bot, o
+# toca un botón (configurado una única vez con el método setWebhook de
+# la Bot API, ver README). No usa sesión de la app ni CRON_SECRET - se
+# protege con el secret_token propio de Telegram (header
+# X-Telegram-Bot-Api-Secret-Token) más un chequeo de que el chat sea el
+# tuyo (TELEGRAM_CHAT_ID), para que nadie más pueda hacerle preguntas
+# al bot ni cargar horas a tu nombre.
+#
+# Además de responder preguntas, el bot deja registrar horas por chat
+# ("2h hoy: reunión con cliente") - Telegram no tiene forma de mandar
+# un <select>, así que la subtarea se elige con botones inline en un
+# segundo paso. Mientras se espera esa elección (o las horas, si el
+# registro arrancó tocando un botón de "día sin cargar"), el estado
+# pendiente vive en PENDIENTES_TELEGRAM, en memoria del proceso - igual
+# que _intentos_login más arriba: el Procfile corre un único worker de
+# gunicorn, así que no hace falta compartir esto entre procesos. Si el
+# server se reinicia a mitad de un registro simplemente se pierde y hay
+# que volver a escribir, no es grave.
 
-def telegram_enviar_mensaje(texto):
+PENDIENTES_TELEGRAM = {}
+
+
+def telegram_enviar_mensaje(texto, teclado=None):
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         return
+    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": texto}
+    if teclado:
+        payload["reply_markup"] = {"inline_keyboard": teclado}
     try:
         requests.post(
             f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
-            json={"chat_id": TELEGRAM_CHAT_ID, "text": texto},
+            json=payload,
             timeout=10,
         )
     except requests.RequestException:
         pass  # el peor caso es que no llegue el mensaje, no vale la pena reintentar acá
 
 
+def telegram_editar_mensaje(chat_id, message_id, texto):
+    if not TELEGRAM_BOT_TOKEN or not message_id:
+        return
+    try:
+        requests.post(
+            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/editMessageText",
+            json={"chat_id": chat_id, "message_id": message_id, "text": texto},
+            timeout=10,
+        )
+    except requests.RequestException:
+        pass
+
+
+def telegram_responder_callback(callback_id, texto=None):
+    if not TELEGRAM_BOT_TOKEN:
+        return
+    payload = {"callback_query_id": callback_id, **({"text": texto} if texto else {})}
+    try:
+        requests.post(
+            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/answerCallbackQuery",
+            json=payload,
+            timeout=10,
+        )
+    except requests.RequestException:
+        pass
+
+
 def _quitar_acentos(texto):
     return "".join(c for c in unicodedata.normalize("NFKD", texto) if not unicodedata.combining(c))
 
 
-def _responder_pregunta_telegram(texto, tarjeta):
-    # Sin acentos y en minúscula, así "¿Qué días no he subido horas?" y
-    # "que dias no subi horas" matchean igual - no vale la pena pedirle
-    # precisión de tipeo a un chat.
-    texto = _quitar_acentos(texto.lower().strip())
+_RE_HORAS = re.compile(r"(\d+(?:[.,]\d+)?)\s*h(?:s\.?|oras?)?\b", re.IGNORECASE)
+_RE_FECHA_DDMM = re.compile(r"\b(\d{1,2})[/-](\d{1,2})\b")
+_DISPARADORES_FALTANTES = (
+    "falta", "sin cargar", "sin subir", "sin horas",
+    "no he subido", "no subi", "no cargue", "no cargu", "no cargado",
+    "dias sin", "que dias", "que dia",
+)
+_DISPARADORES_RESUMEN = ("resum", "semana", "mes", "cuant", "llevo", "total")
 
-    disparadores_faltantes = (
-        "falta", "sin cargar", "sin subir", "sin horas",
-        "no he subido", "no subi", "no cargue", "no cargu", "no cargado",
-        "dias sin", "que dias", "que dia",
-    )
-    if any(p in texto for p in disparadores_faltantes):
-        dias = dias_habiles_atras(10)
-        task_ids = subtareas_ids_de_tarjeta(tarjeta)
-        if not task_ids:
-            return "No encontré subtareas para tu tarjeta."
-        fecha_min = min(dias).isoformat()
-        fecha_max = max(dias).isoformat()
-        lineas = odoo_execute_kw(
-            "account.analytic.line", "search_read",
-            [[["task_id", "in", task_ids], ["date", ">=", fecha_min], ["date", "<=", fecha_max]]],
-            {"fields": ["date"]},
-        )
-        con_horas = {l["date"] for l in lineas}
-        faltantes = sorted(d for d in dias if d.isoformat() not in con_horas)
-        if not faltantes:
-            return "✅ No te falta cargar ningún día hábil de los últimos 10."
-        listado = "\n".join("- " + d.strftime("%d/%m") for d in faltantes)
-        return f"📋 Días hábiles sin horas cargadas (últimos 10):\n{listado}"
 
-    if any(p in texto for p in ("resum", "semana", "mes", "cuant", "llevo", "total")):
-        r = _calcular_resumen(tarjeta)
-        detalle = "\n".join(f"- {s['subtarea']}: {s['horas']:.1f}h" for s in r["por_subtarea"])
-        detalle = detalle or "(sin horas cargadas esta semana)"
-        return f"📊 Esta semana: {r['semana']:.1f}h · Este mes: {r['mes']:.1f}h\n\n{detalle}"
+def _parsear_horas(texto):
+    """Busca un patrón tipo '2h' o '1,5 horas' en el texto.
+    Devuelve (horas, texto_sin_ese_pedazo) o (None, texto) si no encuentra nada."""
+    m = _RE_HORAS.search(texto)
+    if not m:
+        return None, texto
+    horas = float(m.group(1).replace(",", "."))
+    resto = (texto[:m.start()] + texto[m.end():]).strip(" :-,.")
+    return horas, resto
 
+
+def _parsear_fecha(texto):
+    """Busca 'hoy', 'ayer' o una fecha dd/mm en el texto.
+    Devuelve (fecha_iso, texto_sin_ese_pedazo); si no encuentra nada, asume hoy."""
+    sin_acentos = _quitar_acentos(texto.lower())
+
+    m = re.search(r"\bhoy\b", sin_acentos)
+    if m:
+        return date.today().isoformat(), (texto[:m.start()] + texto[m.end():]).strip(" :-,.")
+
+    m = re.search(r"\bayer\b", sin_acentos)
+    if m:
+        ayer = date.today() - timedelta(days=1)
+        return ayer.isoformat(), (texto[:m.start()] + texto[m.end():]).strip(" :-,.")
+
+    m = _RE_FECHA_DDMM.search(texto)
+    if m:
+        try:
+            f = date(date.today().year, int(m.group(2)), int(m.group(1)))
+            return f.isoformat(), (texto[:m.start()] + texto[m.end():]).strip(" :-,.")
+        except ValueError:
+            pass  # "32/13" y similares - se ignora y se sigue con hoy
+
+    return date.today().isoformat(), texto
+
+
+def _teclado_subtareas(tarjeta):
+    return [
+        [{"text": t["name"][:60], "callback_data": f"subtarea:{t['id']}"}]
+        for t in subtareas_de_tarjeta(tarjeta)
+    ]
+
+
+def _texto_ayuda():
     return (
-        "No entendí la pregunta. Puedo ayudarte con:\n"
-        "- \"¿qué días no he subido horas?\" → días hábiles sin cargar (últimos 10)\n"
-        "- \"resumen\" o \"¿cuántas horas llevo esta semana?\" → resumen semanal/mensual"
+        "Hola 👋 Puedo ayudarte con:\n"
+        "/resumen — horas de esta semana y este mes\n"
+        "/faltantes — días hábiles sin cargar\n"
+        "\"2h hoy: reunión con cliente\" — registra horas (elegís la subtarea con botones)"
     )
+
+
+def _texto_resumen(tarjeta):
+    r = _calcular_resumen(tarjeta)
+    detalle = "\n".join(f"- {s['subtarea']}: {s['horas']:.1f}h" for s in r["por_subtarea"])
+    detalle = detalle or "(sin horas cargadas esta semana)"
+    return f"📊 Esta semana: {r['semana']:.1f}h · Este mes: {r['mes']:.1f}h\n\n{detalle}"
+
+
+def _texto_faltantes(tarjeta):
+    """Devuelve (texto, teclado): un botón por día sin cargar que arranca
+    el registro con esa fecha ya puesta (ver _manejar_callback_telegram)."""
+    dias = dias_habiles_atras(10)
+    task_ids = subtareas_ids_de_tarjeta(tarjeta)
+    if not task_ids:
+        return "No encontré subtareas para tu tarjeta.", None
+    fecha_min = min(dias).isoformat()
+    fecha_max = max(dias).isoformat()
+    lineas = odoo_execute_kw(
+        "account.analytic.line", "search_read",
+        [[["task_id", "in", task_ids], ["date", ">=", fecha_min], ["date", "<=", fecha_max]]],
+        {"fields": ["date"]},
+    )
+    con_horas = {l["date"] for l in lineas}
+    faltantes = sorted(d for d in dias if d.isoformat() not in con_horas)
+    if not faltantes:
+        return "✅ No te falta cargar ningún día hábil de los últimos 10.", None
+    listado = "\n".join("- " + d.strftime("%d/%m") for d in faltantes)
+    teclado = [
+        [{"text": "Cargar " + d.strftime("%d/%m"), "callback_data": "faltante:" + d.isoformat()}]
+        for d in faltantes
+    ]
+    return f"📋 Días hábiles sin horas cargadas (últimos 10):\n{listado}", teclado
+
+
+def _procesar_mensaje_telegram(texto, chat_id, tarjeta):
+    """Interpreta un mensaje de texto libre. Devuelve (texto_respuesta, teclado_o_None)."""
+    pendiente = PENDIENTES_TELEGRAM.get(chat_id)
+
+    if pendiente and pendiente["etapa"] == "esperando_horas":
+        horas, detalle = _parsear_horas(texto)
+        if horas is None:
+            return "No entendí las horas. Mandame algo como '2h reunión con cliente'.", None
+        teclado = _teclado_subtareas(tarjeta)
+        if not teclado:
+            del PENDIENTES_TELEGRAM[chat_id]
+            return "No encontré subtareas para tu tarjeta.", None
+        PENDIENTES_TELEGRAM[chat_id] = {
+            "etapa": "elegir_subtarea", "fecha": pendiente["fecha"], "horas": horas, "detalle": detalle,
+        }
+        return "¿En qué subtarea? 👇", teclado
+
+    normalizado = _quitar_acentos(texto.lower().strip())
+
+    if _RE_HORAS.search(texto):
+        fecha, resto = _parsear_fecha(texto)
+        horas, detalle = _parsear_horas(resto)
+        if horas is None:  # la fecha se comió el número por algún solape raro - probamos de nuevo sobre el texto original
+            horas, detalle = _parsear_horas(texto)
+        teclado = _teclado_subtareas(tarjeta)
+        if not teclado:
+            return "No encontré subtareas para tu tarjeta.", None
+        PENDIENTES_TELEGRAM[chat_id] = {"etapa": "elegir_subtarea", "fecha": fecha, "horas": horas, "detalle": detalle}
+        return "¿En qué subtarea? 👇", teclado
+
+    if any(p in normalizado for p in _DISPARADORES_FALTANTES):
+        return _texto_faltantes(tarjeta)
+
+    if any(p in normalizado for p in _DISPARADORES_RESUMEN):
+        return _texto_resumen(tarjeta), None
+
+    return "No entendí. " + _texto_ayuda(), None
+
+
+def _manejar_callback_telegram(callback, tarjeta):
+    mensaje = callback.get("message") or {}
+    chat_id = str((mensaje.get("chat") or {}).get("id", ""))
+    message_id = mensaje.get("message_id")
+    callback_id = callback.get("id")
+    data = callback.get("data") or ""
+
+    if not TELEGRAM_CHAT_ID or chat_id != TELEGRAM_CHAT_ID:
+        telegram_responder_callback(callback_id)
+        return
+
+    if data.startswith("faltante:"):
+        fecha = data.split(":", 1)[1]
+        PENDIENTES_TELEGRAM[chat_id] = {"etapa": "esperando_horas", "fecha": fecha}
+        telegram_responder_callback(callback_id)
+        bonita = datetime.strptime(fecha, "%Y-%m-%d").strftime("%d/%m")
+        telegram_editar_mensaje(chat_id, message_id, f"🗓️ {bonita} — mandame las horas y la descripción, ej. '2h reunión con cliente'.")
+        return
+
+    if data.startswith("subtarea:"):
+        pendiente = PENDIENTES_TELEGRAM.get(chat_id)
+        if not pendiente or pendiente.get("etapa") != "elegir_subtarea":
+            telegram_responder_callback(callback_id, "Se perdió el contexto del registro, empezá de nuevo.")
+            return
+        try:
+            _crear_linea_timesheet(int(data.split(":", 1)[1]), pendiente["fecha"], pendiente["horas"], pendiente["detalle"])
+        except Exception as e:
+            print(f"[telegram] error creando línea desde el bot: {e}", file=sys.stderr)
+            telegram_responder_callback(callback_id, "No se pudo registrar, hubo un error con Odoo.")
+            return
+        del PENDIENTES_TELEGRAM[chat_id]
+        telegram_responder_callback(callback_id, "Registrado ✅")
+        bonita = datetime.strptime(pendiente["fecha"], "%Y-%m-%d").strftime("%d/%m")
+        telegram_editar_mensaje(chat_id, message_id, f"✅ {pendiente['horas']:.2f}h el {bonita} — cargado en Odoo.")
+        return
+
+    telegram_responder_callback(callback_id)
 
 
 @app.route("/api/telegram-webhook", methods=["POST"])
@@ -862,6 +1035,13 @@ def telegram_webhook():
         return jsonify({"error": "no encontrado"}), 404
 
     update = request.get_json(silent=True) or {}
+    tarjeta = os.environ.get("BOOTSTRAP_ADMIN_TARJETA", "").strip()
+
+    if "callback_query" in update:
+        if tarjeta:
+            _manejar_callback_telegram(update["callback_query"], tarjeta)
+        return jsonify({"ok": True})
+
     mensaje = update.get("message") or update.get("edited_message") or {}
     texto = (mensaje.get("text") or "").strip()
     chat_id = str((mensaje.get("chat") or {}).get("id", ""))
@@ -871,24 +1051,31 @@ def telegram_webhook():
     if not texto or not TELEGRAM_CHAT_ID or chat_id != TELEGRAM_CHAT_ID:
         return jsonify({"ok": True})
 
-    tarjeta = os.environ.get("BOOTSTRAP_ADMIN_TARJETA", "").strip()
     if not tarjeta:
         telegram_enviar_mensaje("No hay BOOTSTRAP_ADMIN_TARJETA configurada en el servidor.")
         return jsonify({"ok": True})
 
-    if texto.startswith("/start") or texto.lower() in ("ayuda", "help", "/help"):
-        respuesta = (
-            "Hola 👋 Puedo contestarte cosas como:\n"
-            "- \"¿qué días no he subido horas?\"\n"
-            "- \"resumen de esta semana\""
-        )
-    else:
-        try:
-            respuesta = _responder_pregunta_telegram(texto, tarjeta)
-        except Exception as e:
-            respuesta = f"Tuve un error consultando Odoo: {e}"
+    comando = texto.lower().strip().split("@")[0]  # "/resumen@mi_bot" -> "/resumen", por si Telegram lo agrega
 
-    telegram_enviar_mensaje(respuesta)
+    try:
+        if comando.startswith("/"):
+            PENDIENTES_TELEGRAM.pop(chat_id, None)  # un comando explícito cancela cualquier registro a medio hacer
+
+        if comando in ("/start", "/ayuda", "/help", "ayuda", "help"):
+            respuesta, teclado = _texto_ayuda(), None
+        elif comando == "/resumen":
+            respuesta, teclado = _texto_resumen(tarjeta), None
+        elif comando == "/faltantes":
+            respuesta, teclado = _texto_faltantes(tarjeta)
+        elif comando == "/registrar":
+            respuesta, teclado = "Mandame algo como '2h hoy: reunión con cliente' y elegís la subtarea con botones.", None
+        else:
+            respuesta, teclado = _procesar_mensaje_telegram(texto, chat_id, tarjeta)
+    except Exception as e:
+        print(f"[telegram] error procesando mensaje: {e}", file=sys.stderr)
+        respuesta, teclado = "Tuve un problema consultando Odoo. Probá de nuevo en un rato; si sigue, revisá los logs del backend.", None
+
+    telegram_enviar_mensaje(respuesta, teclado)
     return jsonify({"ok": True})
 
 
@@ -922,6 +1109,26 @@ def dias_cargados():
     return jsonify({"dias": [{"fecha": f, "horas": h} for f, h in totales.items()]})
 
 
+def _crear_linea_timesheet(task_id, fecha, horas, detalle):
+    """Crea la línea en account.analytic.line para una subtarea ya resuelta
+    (por id). Usado tanto por /api/timesheet (que resuelve el id a partir
+    de un nombre de subtarea) como por el bot de Telegram (que ya tiene el
+    id porque lo sacó de un botón)."""
+    tarea = odoo_execute_kw("project.task", "read", [[task_id]], {"fields": ["project_id", "name"]})[0]
+    employee_id = obtener_employee_de_tarea(task_id)
+    return odoo_execute_kw(
+        "account.analytic.line", "create",
+        [{
+            "name": detalle or tarea["name"],
+            "date": fecha,
+            "unit_amount": horas,
+            "project_id": tarea["project_id"][0],
+            "task_id": task_id,
+            "employee_id": employee_id,
+        }],
+    )
+
+
 @app.route("/api/timesheet", methods=["POST"])
 def crear_timesheet():
     data = request.get_json()
@@ -939,21 +1146,7 @@ def crear_timesheet():
     if not task_id:
         return jsonify({"error": f"no se encontro la subtarea '{subtarea}' en la tarjeta '{tarjeta}'"}), 404
 
-    tarea = odoo_execute_kw("project.task", "read", [[task_id]], {"fields": ["project_id"]})[0]
-    project_id = tarea["project_id"][0]
-    employee_id = obtener_employee_de_tarea(task_id)
-
-    nuevo_id = odoo_execute_kw(
-        "account.analytic.line", "create",
-        [{
-            "name": detalle or subtarea,
-            "date": fecha,
-            "unit_amount": horas,
-            "project_id": project_id,
-            "task_id": task_id,
-            "employee_id": employee_id,
-        }],
-    )
+    nuevo_id = _crear_linea_timesheet(task_id, fecha, horas, detalle or subtarea)
     return jsonify({"ok": True, "id": nuevo_id})
 
 

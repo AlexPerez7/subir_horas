@@ -70,11 +70,17 @@ async function inicializar(){
   iniciarMonitoreoBackend();
 
   document.getElementById('userbox').innerHTML =
-    '<div><b>' + yo.username + '</b> · ' + yo.tarjeta + '</div>' +
-    '<div class="acciones">' +
-      '<a onclick="toggleCambiarPassword(true)">Cambiar contraseña</a>' +
-      '<a onclick="cerrarSesion()">Cerrar sesión</a>' +
+    '<button type="button" class="avatar-btn" id="avatarBtn" aria-haspopup="true" aria-expanded="false">' +
+      (yo.username || '?').charAt(0).toUpperCase() +
+    '</button>' +
+    '<div class="acc-menu" id="accMenu">' +
+      '<div class="acc-who"><b>' + yo.username + '</b> · ' + yo.tarjeta + '</div>' +
+      '<div class="acc-actions">' +
+        '<button type="button" class="acc-item" onclick="toggleCambiarPassword(true)">Cambiar contraseña</button>' +
+        '<button type="button" class="acc-item" onclick="cerrarSesion()">Cerrar sesión</button>' +
+      '</div>' +
     '</div>';
+  wireAvatarMenu();
 
   if(ES_ADMIN){
     document.getElementById('labelTarjeta').style.display = '';
@@ -96,6 +102,28 @@ async function inicializar(){
   verificarRecordatorio();
   cargarResumen();
   cargarHeatmap();
+}
+
+// En mobile el avatar abre un menú desplegable con las acciones de cuenta
+// (en desktop el CSS lo muestra siempre expandido y el botón queda oculto).
+function wireAvatarMenu(){
+  const btn = document.getElementById('avatarBtn');
+  const menu = document.getElementById('accMenu');
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const abierto = menu.classList.toggle('abierto');
+    btn.setAttribute('aria-expanded', abierto ? 'true' : 'false');
+  });
+  if(window._accMenuGlobalWired) return;
+  window._accMenuGlobalWired = true;
+  const cerrarMenu = () => {
+    const m = document.getElementById('accMenu');
+    const b = document.getElementById('avatarBtn');
+    if(m) m.classList.remove('abierto');
+    if(b) b.setAttribute('aria-expanded', 'false');
+  };
+  document.addEventListener('click', cerrarMenu);
+  document.addEventListener('keydown', (e) => { if(e.key === 'Escape') cerrarMenu(); });
 }
 
 let TAB_ACTIVA = 'registrar';
