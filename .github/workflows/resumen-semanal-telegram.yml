@@ -6,23 +6,39 @@ name: Resumen semanal de horas por Telegram
 # avisa cuando falta cargar un día, este es un resumen informativo que
 # se manda siempre. Reusa los mismos secrets CRON_SECRET,
 # TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID (ver README).
+#
+# Igual que en recordatorio-telegram.yml: GitHub Actions agenda en
+# UTC y Chile cambia entre UTC-3 y UTC-4 según horario de verano, así
+# que se dispara dos veces (cubriendo ambos offsets posibles) y se
+# descarta la corrida que no caiga a las 17h hora de Chile, usando el
+# horario real de la zona en vez de calcularlo a mano.
 
 on:
   schedule:
-    - cron: "0 20 * * 5"  # ~16-17h Chile (UTC-4/-3 según horario de verano), viernes
+    - cron: "0 20 * * 5"  # 17h Chile si está en UTC-3
+    - cron: "0 21 * * 5"  # 17h Chile si está en UTC-4
   workflow_dispatch: {}
 
 jobs:
   resumen:
     runs-on: ubuntu-latest
     steps:
+      - name: Verificar que sean las 17h en Chile
+        id: hora
+        run: |
+          HORA_LOCAL=$(TZ=America/Santiago date +%H)
+          echo "Hora local en Chile ahora mismo: $HORA_LOCAL"
+          echo "correcta=$([ "$HORA_LOCAL" = "17" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
       - name: Consultar resumen semanal
         id: consulta
+        if: steps.hora.outputs.correcta == 'true' || github.event_name == 'workflow_dispatch'
         run: |
           curl -fsS -H "X-Cron-Secret: ${{ secrets.CRON_SECRET }}" https://subir-horas.onrender.com/api/resumen-semanal-cron > resumen.json
           cat resumen.json
 
       - name: Armar y enviar mensaje por Telegram
+        if: steps.consulta.outcome == 'success'
         run: |
           SEMANA=$(jq -r '.semana' resumen.json)
           DETALLE=$(jq -r '.por_subtarea[] | "- \(.subtarea): \(.horas)h"' resumen.json)

@@ -6,18 +6,35 @@ name: Recordatorio de horas por Telegram
 # configurar los secrets CRON_SECRET, TELEGRAM_BOT_TOKEN y
 # TELEGRAM_CHAT_ID. Sin esos secrets cargados, este workflow va a
 # fallar (esperado hasta terminar la configuración).
+#
+# GitHub Actions solo agenda en UTC, y Chile a veces está en UTC-3 y a
+# veces en UTC-4 según horario de verano - un único horario cron fijo
+# se corre entonces 1h antes o después según la época del año. En vez
+# de adivinar las fechas del cambio de horario a mano, se dispara dos
+# veces (cubriendo ambos offsets posibles) y el primer paso descarta
+# la corrida que no caiga a las 08h hora de Chile, usando el horario
+# real de la zona (America/Santiago) en vez de un cálculo propio.
 
 on:
   schedule:
-    - cron: "0 12 * * 1-5"  # ~08-09h Chile (UTC-4/-3 según horario de verano), lunes a viernes
+    - cron: "0 11 * * 1-5"  # 08h Chile si está en UTC-3
+    - cron: "0 12 * * 1-5"  # 08h Chile si está en UTC-4
   workflow_dispatch: {}
 
 jobs:
   recordatorio:
     runs-on: ubuntu-latest
     steps:
+      - name: Verificar que sean las 08h en Chile
+        id: hora
+        run: |
+          HORA_LOCAL=$(TZ=America/Santiago date +%H)
+          echo "Hora local en Chile ahora mismo: $HORA_LOCAL"
+          echo "correcta=$([ "$HORA_LOCAL" = "08" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
       - name: Consultar si falta cargar horas
         id: consulta
+        if: steps.hora.outputs.correcta == 'true' || github.event_name == 'workflow_dispatch'
         run: |
           RESPUESTA=$(curl -fsS -H "X-Cron-Secret: ${{ secrets.CRON_SECRET }}" https://subir-horas.onrender.com/api/recordatorio-cron)
           echo "$RESPUESTA"

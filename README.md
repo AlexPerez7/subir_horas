@@ -193,9 +193,16 @@ En el repo: **Settings → Secrets and variables → Actions → New repository 
 
 Pestaña **Actions → Recordatorio de horas por Telegram → Run workflow** (y lo mismo para **Resumen semanal de horas por Telegram**). Si los tres secrets están bien cargados, el job debería pasar en verde. Mientras no los cargues, estos workflows van a fallar — es el comportamiento esperado hasta terminar de configurarlos, no un bug.
 
-### Bot interactivo: preguntarle cosas al bot
+### Bot interactivo: preguntarle cosas al bot (y cargar horas)
 
-Además de los avisos automáticos, le podés escribir directo al bot en Telegram cosas como **"¿qué días no he subido horas?"** o **"resumen de esta semana"** y te contesta con datos reales de Odoo. Esto es distinto de los workflows de arriba: en vez de un job periódico que empuja un mensaje, es un **webhook** — Telegram le pega un `POST` a tu backend en Render cada vez que le escribís, y el backend responde en el momento (`POST /api/telegram-webhook` en [`backend_odoo.py`](backend_odoo.py)).
+Además de los avisos automáticos, le podés escribir directo al bot en Telegram. Esto es distinto de los workflows de arriba: en vez de un job periódico que empuja un mensaje, es un **webhook** — Telegram le pega un `POST` a tu backend en Render cada vez que le escribís (o tocás un botón), y el backend responde en el momento (`POST /api/telegram-webhook` en [`backend_odoo.py`](backend_odoo.py)).
+
+Entiende:
+- `/resumen` o **"resumen de esta semana"** → total de horas de la semana y el mes, con el detalle por subtarea.
+- `/faltantes` o **"¿qué días no he subido horas?"** → días hábiles sin cargar de los últimos 10, cada uno con un botón para arrancar la carga de ese día.
+- **"2h hoy: reunión con cliente"** → registra horas directo desde el chat. El bot entiende `hoy`, `ayer` o una fecha `dd/mm`, y la cantidad de horas (`2h`, `1,5 horas`); como Telegram no tiene forma de mandar un desplegable, la subtarea se elige tocando uno de los botones que te ofrece después.
+
+El bot solo responde a mensajes y toques de botón que vengan de `TELEGRAM_CHAT_ID`; si alguien más le escribe (por ejemplo si el username del bot se filtra), el backend los ignora en silencio — nadie más puede ver tus horas ni cargar horas a tu nombre.
 
 **1. Variables de entorno en Render**
 
@@ -212,11 +219,19 @@ curl -X POST "https://api.telegram.org/bot<TOKEN>/setWebhook" `
   -d url="https://tu-servicio.onrender.com/api/telegram-webhook" `
   -d secret_token="<TELEGRAM_WEBHOOK_SECRET>"
 ```
-Debería responder `{"ok":true,"result":true,...}`. A partir de ahí, cualquier mensaje que le mandes al bot dispara el webhook automáticamente — no hace falta volver a correr esto salvo que cambies de URL de Render o quieras rotar el secreto.
+Debería responder `{"ok":true,"result":true,...}`. A partir de ahí, cualquier mensaje que le mandes al bot (o botón que toques) dispara el webhook automáticamente — no hace falta volver a correr esto salvo que cambies de URL de Render o quieras rotar el secreto.
 
-**3. Probar**
+**3. Registrar los comandos en Telegram (opcional, una sola vez)**
 
-Escribile al bot "resumen" o "¿qué días no he subido horas?" desde Telegram. Si el backend estaba dormido (Render free), la primera respuesta puede tardar hasta un minuto en llegar (arranque en frío) — es normal. El bot solo responde a mensajes que vengan de `TELEGRAM_CHAT_ID`; si alguien más le escribe (por ejemplo si el username del bot se filtra), el backend los ignora en silencio.
+Para que `/resumen`, `/faltantes` y `/ayuda` aparezcan en el menú "/" del chat en vez de tener que acordarte de tipearlos:
+```powershell
+curl -X POST "https://api.telegram.org/bot<TOKEN>/setMyCommands" `
+  -d "commands=[{\"command\":\"resumen\",\"description\":\"Horas de esta semana y este mes\"},{\"command\":\"faltantes\",\"description\":\"Días hábiles sin cargar\"},{\"command\":\"registrar\",\"description\":\"Cómo cargar horas por chat\"},{\"command\":\"ayuda\",\"description\":\"Qué puede hacer el bot\"}]"
+```
+
+**4. Probar**
+
+Escribile al bot "resumen" o "¿qué días no he subido horas?" desde Telegram. Si el backend estaba dormido (Render free), la primera respuesta puede tardar hasta un minuto en llegar (arranque en frío) — es normal.
 
 ---
 
