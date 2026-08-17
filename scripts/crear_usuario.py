@@ -1,10 +1,10 @@
 """
 CLI para crear o resetear usuarios de la app (tabla `usuarios` en
-usuarios.db, junto a backend_odoo.py).
+usuarios.db, en la raíz del repo - ver backend/db.py).
 
-Uso:
-    python crear_usuario.py <username> <tarjeta> [--admin]
-    python crear_usuario.py <username> --reset-password
+Uso (desde la raíz del repo):
+    python scripts/crear_usuario.py <username> <tarjeta> [--admin]
+    python scripts/crear_usuario.py <username> --reset-password
 
 En Render (plan free, disco efímero): correr esto desde la pestaña
 "Shell" del servicio ya desplegado, no en tu máquina - usuarios.db
@@ -14,11 +14,16 @@ a correrlo después de cada redeploy del backend.
 
 import argparse
 import getpass
+import os
 import sqlite3
+import sys
 
 from werkzeug.security import generate_password_hash
 
-from backend_odoo import DB_PATH
+# El script vive en scripts/, pero el paquete backend/ está en la raíz del
+# repo (un nivel arriba) - hay que agregarla a sys.path para poder importar.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from backend.config import DB_PATH
 
 
 def pedir_password():

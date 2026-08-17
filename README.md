@@ -41,8 +41,8 @@ Consiste en un formulario web estático (publicado en **GitHub Pages**) conectad
 ```
 
 - **`index.html`** — formulario standalone (HTML + CSS + JS, sin frameworks ni build step). Permite elegir tarjeta, subtarea, fecha, horas y descripción; muestra en vivo el historial real de esa subtarea en Odoo. No tiene ningún secreto embebido — solo la URL pública del backend. Se publica tal cual en GitHub Pages.
-- **`backend_odoo.py`** — API Flask (JSON puro) que hace de intermediaria con Odoo y gestiona el login propio de la app (usuario/contraseña, token de sesión firmado, tabla `usuarios` en SQLite). Nunca se llama a Odoo directo desde el navegador (evita exponer el token de API). Se despliega en Render, separado del frontend.
-- **`crear_usuario.py`** — CLI para crear cuentas o resetear contraseñas en `usuarios.db`. Se corre del lado del backend desplegado (ver [Gestión de usuarios](#gestión-de-usuarios)).
+- **`backend_odoo.py` + el paquete `backend/`** — API Flask (JSON puro) que hace de intermediaria con Odoo y gestiona el login propio de la app (usuario/contraseña, token de sesión firmado, tabla `usuarios` en SQLite). Nunca se llama a Odoo directo desde el navegador (evita exponer el token de API). Se despliega en Render, separado del frontend. Ver [Estructura del proyecto](#estructura-del-proyecto) para cómo está dividido el paquete.
+- **`scripts/crear_usuario.py`** — CLI para crear cuentas o resetear contraseñas en `usuarios.db`. Se corre del lado del backend desplegado (ver [Gestión de usuarios](#gestión-de-usuarios)).
 
 Como el frontend y el backend viven en dominios distintos (`*.github.io` vs `*.onrender.com`), la comunicación es cross-origin. La autenticación **no usa cookies**: muchos navegadores (Safari, Brave, Samsung Internet, y cada vez más) bloquean por defecto las cookies "de terceros" aunque tengan `SameSite=None; Secure`, lo que rompería el login. En cambio, `/api/login` devuelve un token firmado que el frontend guarda en `localStorage` y manda como header `Authorization: Bearer <token>` en cada pedido — no depende de ninguna política de cookies del navegador. El backend restringe CORS al origen exacto del sitio de GitHub Pages.
 
@@ -117,7 +117,7 @@ Cualquier cambio en `index.html` se ve recargando la pestaña; cambios en `backe
 **Limitaciones del plan free de Render a tener en cuenta:**
 - El servicio "duerme" tras ~15 minutos sin tráfico; el primer request después de eso tarda unos segundos en responder (arranque en frío). Normal para un uso personal.
 - El disco es **efímero**: `usuarios.db` se recrea vacía en cada redeploy del backend. Ver [Gestión de usuarios](#gestión-de-usuarios).
-- **No incluye acceso a Shell** (eso es del plan pago Starter en adelante), así que no se puede correr `crear_usuario.py` a mano ahí — el bootstrap del primer admin se resuelve con variables de entorno, no con la Shell (ver más abajo).
+- **No incluye acceso a Shell** (eso es del plan pago Starter en adelante), así que no se puede correr `scripts/crear_usuario.py` a mano ahí — el bootstrap del primer admin se resuelve con variables de entorno, no con la Shell (ver más abajo).
 
 ---
 
@@ -195,7 +195,7 @@ Pestaña **Actions → Recordatorio de horas por Telegram → Run workflow** (y 
 
 ### Bot interactivo: preguntarle cosas al bot (y cargar horas)
 
-Además de los avisos automáticos, le podés escribir directo al bot en Telegram. Esto es distinto de los workflows de arriba: en vez de un job periódico que empuja un mensaje, es un **webhook** — Telegram le pega un `POST` a tu backend en Render cada vez que le escribís (o tocás un botón), y el backend responde en el momento (`POST /api/telegram-webhook` en [`backend_odoo.py`](backend_odoo.py)).
+Además de los avisos automáticos, le podés escribir directo al bot en Telegram. Esto es distinto de los workflows de arriba: en vez de un job periódico que empuja un mensaje, es un **webhook** — Telegram le pega un `POST` a tu backend en Render cada vez que le escribís (o tocás un botón), y el backend responde en el momento (`POST /api/telegram-webhook`, ver [`backend/routes/telegram_routes.py`](backend/routes/telegram_routes.py) y [`backend/telegram_bot.py`](backend/telegram_bot.py)).
 
 Entiende:
 - `/vincular <usuario> <contraseña>` → asocia ese chat de Telegram a tu cuenta de la app (las mismas credenciales del login web). Hace falta hacerlo una sola vez por chat antes de poder usar el resto de los comandos.
@@ -262,15 +262,15 @@ BOOTSTRAP_ADMIN_PASSWORD=una-contraseña-inicial
 BOOTSTRAP_ADMIN_TARJETA=Alex Perez
 ```
 
-Al arrancar, `backend_odoo.py` se fija si ya existe un usuario con ese `username`; si no existe, lo crea como admin con esa contraseña y tarjeta. Si ya existe, no hace nada — no pisa una contraseña que hayas cambiado después desde el panel. Cargalas en Render (**Environment**) y esperá el redeploy; con eso ya podés loguearte en el sitio de GitHub Pages y usar el panel **Usuarios** para todo lo demás.
+Al arrancar, el backend se fija si ya existe un usuario con ese `username`; si no existe, lo crea como admin con esa contraseña y tarjeta. Si ya existe, no hace nada — no pisa una contraseña que hayas cambiado después desde el panel. Cargalas en Render (**Environment**) y esperá el redeploy; con eso ya podés loguearte en el sitio de GitHub Pages y usar el panel **Usuarios** para todo lo demás.
 
 **Dejalas cargadas en Render permanentemente** (no las borres después del primer login): como el disco de Render free es efímero, `usuarios.db` se resetea en cada redeploy del backend — estas tres variables son justamente la red de seguridad que recrea ese admin automáticamente cada vez que hace falta, sin que tengas que hacer nada manual. Ojo con un detalle: si cambiás la contraseña de `BOOTSTRAP_ADMIN_USERNAME` desde el panel y **después** hay un redeploy, al recrearse el usuario vuelve a la contraseña que esté en `BOOTSTRAP_ADMIN_PASSWORD` en Render (no la que hayas cambiado) — si querés que el cambio sea permanente, actualizá también la variable de entorno.
 
-Si en algún momento corrés esto localmente o en un host con Shell disponible, [`crear_usuario.py`](crear_usuario.py) sigue siendo una alternativa por línea de comandos:
+Si en algún momento corrés esto localmente o en un host con Shell disponible, [`scripts/crear_usuario.py`](scripts/crear_usuario.py) sigue siendo una alternativa por línea de comandos (desde la raíz del repo):
 
 ```powershell
-python crear_usuario.py <username> "<Nombre exacto de la tarjeta en Odoo>" --admin
-python crear_usuario.py <username> --reset-password
+python scripts/crear_usuario.py <username> "<Nombre exacto de la tarjeta en Odoo>" --admin
+python scripts/crear_usuario.py <username> --reset-password
 ```
 
 ---
@@ -280,7 +280,7 @@ python crear_usuario.py <username> --reset-password
 | Qué cambiaste | Qué hacer |
 |---|---|
 | `index.html` (diseño, JS, comportamiento del formulario) | Commit + push a `main`. GitHub Pages lo redespliega solo en un minuto o dos. |
-| `backend_odoo.py` (endpoints, lógica de Odoo, auth) | Commit + push. Si tenés auto-deploy activado en Render, se redespliega solo; si no, disparalo a mano desde el dashboard. Recordá que esto resetea `usuarios.db` (ver arriba). |
+| `backend/` (endpoints, lógica de Odoo, auth, bot de Telegram) | Commit + push. Si tenés auto-deploy activado en Render, se redespliega solo; si no, disparalo a mano desde el dashboard. Recordá que esto resetea `usuarios.db` (ver arriba). |
 | `.env` / variables de entorno del backend | Se editan directo en el dashboard de Render (pestaña Environment). No requiere tocar el repo. |
 
 ### Subir cambios a GitHub (con GitHub Desktop)
@@ -313,8 +313,18 @@ subir_horas/
 │       ├── keep-warm.yml                # ping periódico a Render para que no se duerma
 │       ├── recordatorio-telegram.yml    # avisa por Telegram si falta cargar horas
 │       └── resumen-semanal-telegram.yml # resumen semanal por Telegram (todos los viernes)
-├── backend_odoo.py        # API Flask, login + intermediario con Odoo (se despliega en Render)
-├── crear_usuario.py       # CLI para crear/resetear usuarios
+├── backend_odoo.py        # punto de entrada para gunicorn (ver Procfile) - solo crea la app
+├── backend/                # paquete con toda la lógica del backend (se despliega en Render)
+│   ├── __init__.py          # create_app(): registra rutas y el guard de autenticación
+│   ├── config.py             # variables de entorno y constantes
+│   ├── db.py                 # SQLite: usuarios, auditoría, vínculos de Telegram
+│   ├── auth.py                # token de sesión y bloqueo por intentos fallidos
+│   ├── odoo_client.py          # cliente JSON-RPC de Odoo + caché
+│   ├── horas.py                # días hábiles, validaciones, resumen/recordatorio
+│   ├── telegram_bot.py          # bot interactivo de Telegram
+│   └── routes/                 # un blueprint por área de la API
+├── scripts/
+│   └── crear_usuario.py    # CLI para crear/resetear usuarios
 ├── requirements.txt       # dependencias del backend
 ├── Procfile                # start command para Render
 ├── usuarios.db             # SQLite con usuarios (generado en runtime, NO se sube a git)
@@ -322,7 +332,7 @@ subir_horas/
 └── __pycache__/           # (ignorado)
 ```
 
-`index.html` queda en la raíz porque GitHub Pages sirve ese nombre por convención en la raíz del sitio; `css/` y `js/` se referencian con rutas relativas (`css/style.css`, `js/app.js`), así que si en algún momento se sirve desde una subcarpeta hay que revisar esas rutas.
+`index.html` queda en la raíz porque GitHub Pages sirve ese nombre por convención en la raíz del sitio; `css/` y `js/` se referencian con rutas relativas (`css/style.css`, `js/app.js`), así que si en algún momento se sirve desde una subcarpeta hay que revisar esas rutas. `Procfile`/`requirements.txt` también quedan en la raíz por convención de Render/pip. `backend_odoo.py` queda como un archivo mínimo en la raíz (`from backend import create_app; app = create_app()`) para que el comando de arranque de Render (`gunicorn backend_odoo:app`) no necesite tocarse - toda la lógica real vive en el paquete `backend/`.
 
 ---
 
@@ -373,4 +383,4 @@ Correr `GET /api/campos?modelo=<modelo>&q=<palabra>` (como admin) para confirmar
 El token puede haber expirado (dura `SESSION_LIFETIME_HORAS`, default 8) — volvé a loguearte. Si pasa inmediatamente después de loguearte, revisá en las herramientas de desarrollador (Network) que el pedido a `/api/whoami` esté mandando el header `Authorization: Bearer ...` — si no lo manda, puede ser que `localStorage` esté deshabilitado o bloqueado (modo incógnito estricto, alguna extensión).
 
 **No puedo loguearme después de un redeploy del backend**
-Esperado en el plan free de Render: `usuarios.db` se resetea en cada redeploy. Si tenés `BOOTSTRAP_ADMIN_*` cargadas en Render, ese admin se recrea solo — esperá el redeploy y reintentá. Si no las tenés, corré `crear_usuario.py` (ver [Gestión de usuarios](#gestión-de-usuarios)).
+Esperado en el plan free de Render: `usuarios.db` se resetea en cada redeploy. Si tenés `BOOTSTRAP_ADMIN_*` cargadas en Render, ese admin se recrea solo — esperá el redeploy y reintentá. Si no las tenés, corré `scripts/crear_usuario.py` (ver [Gestión de usuarios](#gestión-de-usuarios)).
