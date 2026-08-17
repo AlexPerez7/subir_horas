@@ -22,7 +22,7 @@
     <label for="loginPassword">Contraseña</label>
     <input type="password" id="loginPassword" autocomplete="current-password">
     <button class="primary" id="btnLogin" onclick="iniciarSesion()">Ingresar</button>
-    <div class="status" id="loginStatus"></div>
+    <div class="status" id="loginStatus" aria-live="polite"></div>
   </div>
 </div>
 
@@ -59,8 +59,8 @@
     </div>
   </header>
 
-  <div id="banner" style="display:none; background:#2E2410; border:1px solid #6B5115; color:#F5C563; font-size:13px; padding:12px 16px; border-radius:8px; margin-bottom:20px;"></div>
-  <div id="bannerExpiracion" style="display:none; background:#2E2410; border:1px solid #6B5115; color:#F5C563; font-size:13px; padding:12px 16px; border-radius:8px; margin-bottom:20px;"></div>
+  <div id="banner" aria-live="polite" style="display:none; background:#2E2410; border:1px solid #6B5115; color:#F5C563; font-size:13px; padding:12px 16px; border-radius:8px; margin-bottom:20px;"></div>
+  <div id="bannerExpiracion" aria-live="polite" style="display:none; background:#2E2410; border:1px solid #6B5115; color:#F5C563; font-size:13px; padding:12px 16px; border-radius:8px; margin-bottom:20px;"></div>
 
   <div id="tabResumen" class="tab-panel">
     <div class="resumen">
@@ -150,7 +150,7 @@
       <button class="primary" id="btnRegistrar" onclick="registrarEnOdoo()">Registrar en Odoo</button>
       <button class="ghost" onclick="exportarCSV()">Exportar CSV (respaldo local)</button>
       <button class="ghost" onclick="exportarExcel()">Exportar Excel (.xls)</button>
-      <div class="status" id="status"></div>
+      <div class="status" id="status" aria-live="polite"></div>
     </div>
 
     <div class="card">
@@ -194,7 +194,8 @@
           </tbody>
         </table>
       </div>
-      <div class="status" id="totalDia" style="margin-top:10px;"></div>
+      <div class="status" id="totalDia" aria-live="polite" style="margin-top:10px;"></div>
+      <div class="status" id="statusDia" aria-live="polite" style="margin-top:6px;"></div>
     </div>
   </div>
 
@@ -244,7 +245,7 @@
       Es administrador
     </label>
     <button class="primary" onclick="crearUsuarioNuevo()">Crear usuario</button>
-    <div class="status" id="usuariosStatus"></div>
+    <div class="status" id="usuariosStatus" aria-live="polite"></div>
 
     <h2 style="margin-top:22px;">Auditoría · últimas acciones</h2>
     <div class="tabla-scroll">
@@ -277,8 +278,8 @@
 </div>
 
 <div id="cambiarPasswordBackdrop" class="modal-backdrop" style="display:none;">
-  <div class="modal">
-    <h2>Cambiar contraseña</h2>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="cpTitulo">
+    <h2 id="cpTitulo">Cambiar contraseña</h2>
     <label for="cpActual">Contraseña actual</label>
     <input type="password" id="cpActual">
     <label for="cpNueva">Contraseña nueva</label>
@@ -287,12 +288,12 @@
     <input type="password" id="cpConfirmar">
     <button class="primary" onclick="guardarCambioPassword()">Guardar</button>
     <button class="ghost" onclick="toggleCambiarPassword(false)">Cancelar</button>
-    <div class="status" id="cpStatus"></div>
+    <div class="status" id="cpStatus" aria-live="polite"></div>
   </div>
 </div>
 
 <div id="modalGenericoBackdrop" class="modal-backdrop" style="display:none;">
-  <div class="modal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalGenericoTitulo">
     <h2 id="modalGenericoTitulo">Confirmar</h2>
     <p id="modalGenericoMensaje" class="modal-mensaje"></p>
     <input type="text" id="modalGenericoInput" style="display:none;">

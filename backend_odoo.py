@@ -36,9 +36,15 @@ Variables de entorno esperadas (.env, NUNCA subir a git; ver .env.example):
     CRON_SECRET=<cadena aleatoria>   (opcional - habilita /api/recordatorio-cron
         para el recordatorio automático por Telegram; ver README)
 
-    TELEGRAM_BOT_TOKEN=<token de @BotFather>       (opcional - habilita el
-    TELEGRAM_CHAT_ID=<tu chat id>                   bot interactivo de
-    TELEGRAM_WEBHOOK_SECRET=<cadena aleatoria>      Telegram; ver README)
+    TELEGRAM_BOT_TOKEN=<token de @BotFather>       (opcional - habilita el bot
+    TELEGRAM_WEBHOOK_SECRET=<cadena aleatoria>      interactivo de Telegram;
+                                                     ver README. TELEGRAM_CHAT_ID
+                                                     NO hace falta acá: cada
+                                                     cuenta se vincula con
+                                                     /vincular desde el propio
+                                                     chat - ese secret solo lo
+                                                     usan los workflows de
+                                                     GitHub Actions de cron)
 """
 
 import os
@@ -60,10 +66,24 @@ _CARPETA = os.path.dirname(os.path.abspath(__file__))
 
 load_dotenv(os.path.join(_CARPETA, ".env"))
 
-ODOO_URL = os.environ["ODOO_URL"]
-ODOO_DB = os.environ["ODOO_DB"]
-ODOO_UID = int(os.environ["ODOO_UID"])
-ODOO_TOKEN = os.environ["ODOO_TOKEN"]
+
+def _env_obligatoria(nombre):
+    """Como os.environ[nombre], pero con un mensaje claro (qué variable
+    falta y dónde revisar) en vez de un KeyError críptico en los logs de
+    Render cuando falta configurar algo."""
+    valor = os.environ.get(nombre)
+    if not valor:
+        sys.exit(
+            f"Falta la variable de entorno obligatoria '{nombre}'. "
+            f"Revisá tu .env local (o las variables de entorno en Render) - ver .env.example."
+        )
+    return valor
+
+
+ODOO_URL = _env_obligatoria("ODOO_URL")
+ODOO_DB = _env_obligatoria("ODOO_DB")
+ODOO_UID = int(_env_obligatoria("ODOO_UID"))
+ODOO_TOKEN = _env_obligatoria("ODOO_TOKEN")
 
 DB_PATH = os.path.join(_CARPETA, "usuarios.db")
 
@@ -72,11 +92,10 @@ TOKEN_LIFETIME_SEGUNDOS = int(os.environ.get("SESSION_LIFETIME_HORAS", 8)) * 360
 CRON_SECRET = os.environ.get("CRON_SECRET", "")
 
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 TELEGRAM_WEBHOOK_SECRET = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "")
 
 app = Flask(__name__, static_folder=None)
-app.secret_key = os.environ["SECRET_KEY"]
+app.secret_key = _env_obligatoria("SECRET_KEY")
 CORS(app, origins=FRONTEND_ORIGINS, allow_headers=["Content-Type", "Authorization"])
 
 _serializer = URLSafeTimedSerializer(app.secret_key, salt="registro-horas-token")
@@ -105,6 +124,13 @@ def _inicializar_db():
             actor TEXT NOT NULL,
             accion TEXT NOT NULL,
             detalle TEXT
+        )
+    """)
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS telegram_links (
+            chat_id TEXT PRIMARY KEY,
+            username TEXT NOT NULL,
+            linked_at TEXT NOT NULL
         )
     """)
     con.commit()
@@ -143,6 +169,40 @@ def actualizar_password(username, nuevo_hash):
     con.execute("UPDATE usuarios SET password_hash = ? WHERE username = ?", (nuevo_hash, username))
     con.commit()
     con.close()
+
+
+def vincular_telegram(chat_id, username):
+    """Asocia un chat_id de Telegram a una cuenta de la app (ver /vincular
+    en el bot). Un chat_id solo puede estar vinculado a un username a la vez
+    - re-vincular pisa el vínculo anterior."""
+    con = sqlite3.connect(DB_PATH)
+    con.execute(
+        "INSERT INTO telegram_links (chat_id, username, linked_at) VALUES (?, ?, ?) "
+        "ON CONFLICT(chat_id) DO UPDATE SET username = excluded.username, linked_at = excluded.linked_at",
+        (chat_id, username, datetime.utcnow().isoformat(timespec="seconds") + "Z"),
+    )
+    con.commit()
+    con.close()
+
+
+def desvincular_telegram(chat_id):
+    con = sqlite3.connect(DB_PATH)
+    cur = con.execute("DELETE FROM telegram_links WHERE chat_id = ?", (chat_id,))
+    con.commit()
+    con.close()
+    return cur.rowcount > 0
+
+
+def usuario_vinculado(chat_id):
+    """Devuelve el usuario (con su tarjeta) vinculado a este chat_id de
+    Telegram, o None si el chat todavía no hizo /vincular."""
+    con = sqlite3.connect(DB_PATH)
+    con.row_factory = sqlite3.Row
+    fila = con.execute("SELECT username FROM telegram_links WHERE chat_id = ?", (chat_id,)).fetchone()
+    con.close()
+    if not fila:
+        return None
+    return obtener_usuario(fila["username"])
 
 
 def requiere_admin():
@@ -224,32 +284,36 @@ def health():
     return jsonify({"status": "ok", "service": "registro-horas-backend"})
 
 
-# Bloqueo simple tras varios intentos fallidos de login, en memoria del
-# proceso (no en SQLite): alcanza porque el Procfile corre un único
-# worker de gunicorn, así que no hace falta coordinar estado entre
-# procesos. Se resetea en cada redeploy, igual que usuarios.db.
+# Bloqueo simple tras varios intentos fallidos de login (o de /vincular del
+# bot de Telegram, ver más abajo), en memoria del proceso (no en SQLite):
+# alcanza porque el Procfile corre un único worker de gunicorn, así que no
+# hace falta coordinar estado entre procesos. Se resetea en cada redeploy,
+# igual que usuarios.db. _intentos_login usa el username como clave;
+# _intentos_vincular_telegram usa el chat_id (ahí todavía no sabemos qué
+# username está probando).
 _intentos_login = {}
+_intentos_vincular_telegram = {}
 INTENTOS_MAXIMOS = 5
 BLOQUEO_SEGUNDOS = 300
 
 
-def _segundos_bloqueado(username):
-    estado = _intentos_login.get(username)
+def _segundos_bloqueado(intentos_dict, clave):
+    estado = intentos_dict.get(clave)
     if not estado:
         return 0
     return max(0, estado["bloqueado_hasta"] - time.time())
 
 
-def _registrar_intento_fallido(username):
-    estado = _intentos_login.setdefault(username, {"conteo": 0, "bloqueado_hasta": 0})
+def _registrar_intento_fallido(intentos_dict, clave):
+    estado = intentos_dict.setdefault(clave, {"conteo": 0, "bloqueado_hasta": 0})
     estado["conteo"] += 1
     if estado["conteo"] >= INTENTOS_MAXIMOS:
         estado["bloqueado_hasta"] = time.time() + BLOQUEO_SEGUNDOS
         estado["conteo"] = 0
 
 
-def _limpiar_intentos(username):
-    _intentos_login.pop(username, None)
+def _limpiar_intentos(intentos_dict, clave):
+    intentos_dict.pop(clave, None)
 
 
 @app.route("/api/login", methods=["POST"])
@@ -258,17 +322,17 @@ def login():
     username = data.get("username", "").strip().lower()
     password = data.get("password", "")
 
-    restante = _segundos_bloqueado(username)
+    restante = _segundos_bloqueado(_intentos_login, username)
     if restante > 0:
         minutos = int(restante // 60) + 1
         return jsonify({"error": f"Demasiados intentos fallidos. Probá de nuevo en {minutos} min."}), 429
 
     usuario = obtener_usuario(username)
     if not usuario or not check_password_hash(usuario["password_hash"], password):
-        _registrar_intento_fallido(username)
+        _registrar_intento_fallido(_intentos_login, username)
         return jsonify({"error": "Usuario o contraseña incorrectos."}), 401
 
-    _limpiar_intentos(username)
+    _limpiar_intentos(_intentos_login, username)
     return jsonify({
         "ok": True,
         "token": generar_token(usuario),
@@ -430,23 +494,50 @@ def odoo_execute_kw(model, method, args, kwargs=None):
     return data["result"]
 
 
+# Caché en memoria con TTL corto para las resoluciones de Odoo que se repiten
+# en casi cada request (project_ids, subtareas de una tarjeta, id de tarea
+# por nombre, empleado de una tarea) - project.task/hr.employee cambian con
+# poca frecuencia (los edita un admin directo en Odoo), así que 60s de
+# staleness es un costo aceptable a cambio de no repetir 3-4 llamadas
+# JSON-RPC por cada carga de página o cada línea de una carga en lote.
+# Mismo criterio que _intentos_login/PENDIENTES_TELEGRAM más abajo: alcanza
+# con memoria del proceso porque el Procfile corre un único worker.
+_CACHE_TTL_SEGUNDOS = 60
+_cache_project_ids = {}
+_cache_subtareas = {}
+_cache_tarea_id = {}
+_cache_employee_id = {}
+
+
+def _con_cache(cache_dict, clave, funcion):
+    ahora = time.time()
+    entrada = cache_dict.get(clave)
+    if entrada and ahora - entrada[1] < _CACHE_TTL_SEGUNDOS:
+        return entrada[0]
+    valor = funcion()
+    cache_dict[clave] = (valor, ahora)
+    return valor
+
+
 def obtener_project_ids():
-    return odoo_execute_kw(
+    return _con_cache(_cache_project_ids, "_", lambda: odoo_execute_kw(
         "project.project", "search",
         [[["name", "=", PROJECT_NAME]]],
-    )
+    ))
 
 
 def subtareas_de_tarjeta(tarjeta):
-    project_ids = obtener_project_ids()
-    return odoo_execute_kw(
-        "project.task", "search_read",
-        [[
-            ["project_id", "in", project_ids],
-            ["parent_id.name", "=", tarjeta],
-        ]],
-        {"fields": ["id", "name"]},
-    )
+    def _consultar():
+        project_ids = obtener_project_ids()
+        return odoo_execute_kw(
+            "project.task", "search_read",
+            [[
+                ["project_id", "in", project_ids],
+                ["parent_id.name", "=", tarjeta],
+            ]],
+            {"fields": ["id", "name"]},
+        )
+    return _con_cache(_cache_subtareas, tarjeta, _consultar)
 
 
 def subtareas_ids_de_tarjeta(tarjeta):
@@ -454,37 +545,41 @@ def subtareas_ids_de_tarjeta(tarjeta):
 
 
 def buscar_tarea_id(nombre_subtarea, tarjeta):
-    project_ids = obtener_project_ids()
-    task_ids = odoo_execute_kw(
-        "project.task", "search",
-        [[
-            ["name", "=", nombre_subtarea],
-            ["project_id", "in", project_ids],
-            ["parent_id.name", "=", tarjeta],
-        ]],
-        {"limit": 1},
-    )
-    return task_ids[0] if task_ids else None
+    def _consultar():
+        project_ids = obtener_project_ids()
+        task_ids = odoo_execute_kw(
+            "project.task", "search",
+            [[
+                ["name", "=", nombre_subtarea],
+                ["project_id", "in", project_ids],
+                ["parent_id.name", "=", tarjeta],
+            ]],
+            {"limit": 1},
+        )
+        return task_ids[0] if task_ids else None
+    return _con_cache(_cache_tarea_id, (nombre_subtarea, tarjeta), _consultar)
 
 
 def obtener_employee_de_tarea(task_id):
-    tarea = odoo_execute_kw(
-        "project.task", "read",
-        [[task_id]], {"fields": ["user_ids"]},
-    )[0]
-    asignados = tarea.get("user_ids") or []
-    if not asignados:
-        raise RuntimeError(f"La tarea {task_id} no tiene ninguna persona asignada (user_ids vacío).")
-    user_id = asignados[0]
+    def _consultar():
+        tarea = odoo_execute_kw(
+            "project.task", "read",
+            [[task_id]], {"fields": ["user_ids"]},
+        )[0]
+        asignados = tarea.get("user_ids") or []
+        if not asignados:
+            raise RuntimeError(f"La tarea {task_id} no tiene ninguna persona asignada (user_ids vacío).")
+        user_id = asignados[0]
 
-    empleados = odoo_execute_kw(
-        "hr.employee", "search_read",
-        [[["user_id", "=", user_id]]],
-        {"fields": ["id", "name"], "limit": 1},
-    )
-    if not empleados:
-        raise RuntimeError(f"No se encontró un hr.employee vinculado al usuario asignado (user_id={user_id}).")
-    return empleados[0]["id"]
+        empleados = odoo_execute_kw(
+            "hr.employee", "search_read",
+            [[["user_id", "=", user_id]]],
+            {"fields": ["id", "name"], "limit": 1},
+        )
+        if not empleados:
+            raise RuntimeError(f"No se encontró un hr.employee vinculado al usuario asignado (user_id={user_id}).")
+        return empleados[0]["id"]
+    return _con_cache(_cache_employee_id, task_id, _consultar)
 
 
 def tarjeta_de_la_request(data_o_args):
@@ -514,6 +609,23 @@ def dias_habiles_atras(n, desde=None):
         if d.weekday() < 5:  # 0-4 = lunes a viernes
             dias.append(d)
     return dias
+
+
+def _validar_horas(valor):
+    """Devuelve el valor como float si es un número > 0, o None si no lo es."""
+    try:
+        horas = float(valor)
+    except (TypeError, ValueError):
+        return None
+    return horas if horas > 0 else None
+
+
+def _fecha_valida(valor):
+    try:
+        date.fromisoformat(valor)
+        return True
+    except (TypeError, ValueError):
+        return False
 
 
 # --------------------------------------------------------------------
@@ -809,9 +921,19 @@ def resumen_semanal_cron():
 # toca un botón (configurado una única vez con el método setWebhook de
 # la Bot API, ver README). No usa sesión de la app ni CRON_SECRET - se
 # protege con el secret_token propio de Telegram (header
-# X-Telegram-Bot-Api-Secret-Token) más un chequeo de que el chat sea el
-# tuyo (TELEGRAM_CHAT_ID), para que nadie más pueda hacerle preguntas
-# al bot ni cargar horas a tu nombre.
+# X-Telegram-Bot-Api-Secret-Token), más el vínculo chat_id→cuenta que cada
+# usuario crea con /vincular (ver más abajo), para que nadie más pueda
+# hacerle preguntas al bot ni cargar horas a nombre de otra cuenta.
+#
+# El bot es multiusuario: cualquier cuenta de la app (no solo el admin
+# bootstrap) puede vincular su chat de Telegram con /vincular <usuario>
+# <contraseña> y usar el bot para su propia tarjeta - antes estaba
+# hardcodeado a BOOTSTRAP_ADMIN_TARJETA y a un único TELEGRAM_CHAT_ID fijo,
+# leído de una variable de entorno acá. Ese TELEGRAM_CHAT_ID ya no hace
+# falta en el .env de este backend (el vínculo ahora vive en SQLite), pero
+# sigue siendo necesario como secret de GitHub Actions para los workflows
+# de recordatorio y resumen semanal, que le pegan directo a la API de
+# Telegram sin pasar por acá.
 #
 # Además de responder preguntas, el bot deja registrar horas por chat
 # ("2h hoy: reunión con cliente") - Telegram no tiene forma de mandar
@@ -827,10 +949,10 @@ def resumen_semanal_cron():
 PENDIENTES_TELEGRAM = {}
 
 
-def telegram_enviar_mensaje(texto, teclado=None):
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+def telegram_enviar_mensaje(chat_id, texto, teclado=None):
+    if not TELEGRAM_BOT_TOKEN or not chat_id:
         return
-    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": texto}
+    payload = {"chat_id": chat_id, "text": texto}
     if teclado:
         payload["reply_markup"] = {"inline_keyboard": teclado}
     try:
@@ -932,7 +1054,8 @@ def _texto_ayuda():
         "Hola 👋 Puedo ayudarte con:\n"
         "/resumen — horas de esta semana y este mes\n"
         "/faltantes — días hábiles sin cargar\n"
-        "\"2h hoy: reunión con cliente\" — registra horas (elegís la subtarea con botones)"
+        "\"2h hoy: reunión con cliente\" — registra horas (elegís la subtarea con botones)\n"
+        "/desvincular — deja de usar el bot con tu cuenta actual"
     )
 
 
@@ -1008,16 +1131,48 @@ def _procesar_mensaje_telegram(texto, chat_id, tarjeta):
     return "No entendí. " + _texto_ayuda(), None
 
 
-def _manejar_callback_telegram(callback, tarjeta):
+def _manejar_vincular(texto, chat_id):
+    """Comando /vincular <usuario> <contraseña>: valida contra usuarios.db
+    (igual que /api/login) y guarda el mapeo chat_id→username. Protegido
+    contra fuerza bruta con el mismo mecanismo de bloqueo que el login web,
+    en un diccionario separado keyado por chat_id."""
+    restante = _segundos_bloqueado(_intentos_vincular_telegram, chat_id)
+    if restante > 0:
+        minutos = int(restante // 60) + 1
+        telegram_enviar_mensaje(chat_id, f"Demasiados intentos fallidos. Probá de nuevo en {minutos} min.")
+        return
+
+    partes = texto.split(maxsplit=2)
+    if len(partes) < 3:
+        telegram_enviar_mensaje(chat_id, "Uso: /vincular <usuario> <contraseña>")
+        return
+
+    username = partes[1].strip().lower()
+    password = partes[2]
+    usuario = obtener_usuario(username)
+    if not usuario or not check_password_hash(usuario["password_hash"], password):
+        _registrar_intento_fallido(_intentos_vincular_telegram, chat_id)
+        telegram_enviar_mensaje(chat_id, "Usuario o contraseña incorrectos.")
+        return
+
+    _limpiar_intentos(_intentos_vincular_telegram, chat_id)
+    vincular_telegram(chat_id, username)
+    PENDIENTES_TELEGRAM.pop(chat_id, None)  # por si el chat ya tenía un registro a medio hacer con la cuenta anterior
+    telegram_enviar_mensaje(chat_id, f"Listo, vinculé este chat a la cuenta '{username}' ✅\n\n" + _texto_ayuda())
+
+
+def _manejar_callback_telegram(callback):
     mensaje = callback.get("message") or {}
     chat_id = str((mensaje.get("chat") or {}).get("id", ""))
     message_id = mensaje.get("message_id")
     callback_id = callback.get("id")
     data = callback.get("data") or ""
 
-    if not TELEGRAM_CHAT_ID or chat_id != TELEGRAM_CHAT_ID:
-        telegram_responder_callback(callback_id)
+    usuario = usuario_vinculado(chat_id)
+    if not usuario:
+        telegram_responder_callback(callback_id, "Vinculá tu cuenta primero con /vincular.")
         return
+    tarjeta = usuario["tarjeta"]
 
     if data.startswith("faltante:"):
         fecha = data.split(":", 1)[1]
@@ -1053,11 +1208,9 @@ def telegram_webhook():
         return jsonify({"error": "no encontrado"}), 404
 
     update = request.get_json(silent=True) or {}
-    tarjeta = os.environ.get("BOOTSTRAP_ADMIN_TARJETA", "").strip()
 
     if "callback_query" in update:
-        if tarjeta:
-            _manejar_callback_telegram(update["callback_query"], tarjeta)
+        _manejar_callback_telegram(update["callback_query"])
         return jsonify({"ok": True})
 
     mensaje = update.get("message") or update.get("edited_message") or {}
@@ -1066,14 +1219,26 @@ def telegram_webhook():
 
     # Siempre 200: Telegram reintenta con backoff si no le contestamos
     # 2xx, y no queremos reintentos por mensajes que decidimos ignorar.
-    if not texto or not TELEGRAM_CHAT_ID or chat_id != TELEGRAM_CHAT_ID:
-        return jsonify({"ok": True})
-
-    if not tarjeta:
-        telegram_enviar_mensaje("No hay BOOTSTRAP_ADMIN_TARJETA configurada en el servidor.")
+    if not texto or not chat_id:
         return jsonify({"ok": True})
 
     comando = texto.lower().strip().split("@")[0]  # "/resumen@mi_bot" -> "/resumen", por si Telegram lo agrega
+
+    if comando.startswith("/vincular"):
+        _manejar_vincular(texto, chat_id)
+        return jsonify({"ok": True})
+
+    if comando in ("/desvincular", "/unlink"):
+        ok = desvincular_telegram(chat_id)
+        PENDIENTES_TELEGRAM.pop(chat_id, None)
+        telegram_enviar_mensaje(chat_id, "Cuenta desvinculada." if ok else "No tenías ninguna cuenta vinculada.")
+        return jsonify({"ok": True})
+
+    usuario = usuario_vinculado(chat_id)
+    if not usuario:
+        telegram_enviar_mensaje(chat_id, "No vinculé este chat a ninguna cuenta todavía. Mandá /vincular <usuario> <contraseña> primero.")
+        return jsonify({"ok": True})
+    tarjeta = usuario["tarjeta"]
 
     try:
         if comando.startswith("/"):
@@ -1093,7 +1258,7 @@ def telegram_webhook():
         print(f"[telegram] error procesando mensaje: {e}", file=sys.stderr)
         respuesta, teclado = "Tuve un problema consultando Odoo. Probá de nuevo en un rato; si sigue, revisá los logs del backend.", None
 
-    telegram_enviar_mensaje(respuesta, teclado)
+    telegram_enviar_mensaje(chat_id, respuesta, teclado)
     return jsonify({"ok": True})
 
 
@@ -1159,6 +1324,11 @@ def crear_timesheet():
 
     if not (subtarea and fecha and horas):
         return jsonify({"error": "faltan campos requeridos"}), 400
+    if not _fecha_valida(fecha):
+        return jsonify({"error": "fecha inválida (usar AAAA-MM-DD)"}), 400
+    horas = _validar_horas(horas)
+    if horas is None:
+        return jsonify({"error": "horas inválidas (debe ser un número mayor a 0)"}), 400
 
     task_id = buscar_tarea_id(subtarea, tarjeta)
     if not task_id:
@@ -1168,12 +1338,10 @@ def crear_timesheet():
     return jsonify({"ok": True, "id": nuevo_id})
 
 
-@app.route("/api/timesheet/<int:line_id>", methods=["PUT"])
-def editar_timesheet(line_id):
-    data = request.get_json()
-    tarjeta = tarjeta_de_la_request(data)
-
-    # Verificar que la línea pertenece a la tarjeta del usuario antes de tocarla
+def _verificar_linea_de_tarjeta(line_id, tarjeta):
+    """Devuelve None si la línea existe y pertenece a la tarjeta dada, o una
+    respuesta de error (mismo patrón que requiere_admin()) si no - para que
+    editar_timesheet y borrar_timesheet no dupliquen este chequeo."""
     task_ids_tarjeta = subtareas_ids_de_tarjeta(tarjeta)
     linea_actual = odoo_execute_kw(
         "account.analytic.line", "read",
@@ -1183,6 +1351,17 @@ def editar_timesheet(line_id):
         return jsonify({"error": "no existe esa línea"}), 404
     if linea_actual[0]["task_id"][0] not in task_ids_tarjeta:
         return jsonify({"error": "esa línea no pertenece a tu tarjeta"}), 403
+    return None
+
+
+@app.route("/api/timesheet/<int:line_id>", methods=["PUT"])
+def editar_timesheet(line_id):
+    data = request.get_json()
+    tarjeta = tarjeta_de_la_request(data)
+
+    error = _verificar_linea_de_tarjeta(line_id, tarjeta)
+    if error:
+        return error
 
     valores = {}
 
@@ -1197,9 +1376,14 @@ def editar_timesheet(line_id):
         valores["employee_id"] = obtener_employee_de_tarea(nuevo_task_id)
 
     if data.get("fecha"):
+        if not _fecha_valida(data["fecha"]):
+            return jsonify({"error": "fecha inválida (usar AAAA-MM-DD)"}), 400
         valores["date"] = data["fecha"]
-    if data.get("horas"):
-        valores["unit_amount"] = data["horas"]
+    if data.get("horas") is not None:
+        horas_validas = _validar_horas(data["horas"])
+        if horas_validas is None:
+            return jsonify({"error": "horas inválidas (debe ser un número mayor a 0)"}), 400
+        valores["unit_amount"] = horas_validas
     if "detalle" in data:
         valores["name"] = data["detalle"]
 
@@ -1214,16 +1398,9 @@ def editar_timesheet(line_id):
 def borrar_timesheet(line_id):
     tarjeta = tarjeta_de_la_request(request.args)
 
-    # Verificar que la línea pertenece a la tarjeta del usuario antes de borrarla
-    task_ids_tarjeta = subtareas_ids_de_tarjeta(tarjeta)
-    linea_actual = odoo_execute_kw(
-        "account.analytic.line", "read",
-        [[line_id]], {"fields": ["task_id"]},
-    )
-    if not linea_actual:
-        return jsonify({"error": "no existe esa línea"}), 404
-    if linea_actual[0]["task_id"][0] not in task_ids_tarjeta:
-        return jsonify({"error": "esa línea no pertenece a tu tarjeta"}), 403
+    error = _verificar_linea_de_tarjeta(line_id, tarjeta)
+    if error:
+        return error
 
     ok = odoo_execute_kw("account.analytic.line", "unlink", [[line_id]])
     return jsonify({"ok": ok})

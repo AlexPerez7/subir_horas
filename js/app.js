@@ -35,6 +35,30 @@ function api(path, options){
   return fetch(API_BASE + path, Object.assign({}, options, { headers }));
 }
 
+// Datos que vienen de Odoo/la DB (descripciones, nombres de tarjeta/subtarea,
+// usernames) o mensajes de error del backend (que a veces reflejan un valor
+// pedido, ej. un nombre de subtarea) se insertan en varios lugares vía
+// innerHTML - hay que escaparlos para que no puedan inyectar HTML/JS.
+function escapeHTML(str){
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// Para valores interpolados dentro de un onclick="funcion('...')": el
+// navegador decodifica las entidades HTML del atributo *antes* de
+// interpretarlo como JS, así que escapar solo caracteres HTML (escapeHTML)
+// no evita que un valor con una comilla simple rompa el string JS. Usamos
+// JSON.stringify para un literal JS válido y escapamos nada más las
+// comillas dobles resultantes, para poder embeberlo en el atributo HTML
+// (que también usa comillas dobles) sin cerrarlo antes de tiempo.
+function jsAttr(valor){
+  return JSON.stringify(String(valor)).replace(/"/g, '&quot;');
+}
+
 async function inicializar(){
   if(!getToken()){
     document.getElementById('appRoot').style.display = 'none';
@@ -74,10 +98,10 @@ async function inicializar(){
 
   document.getElementById('userbox').innerHTML =
     '<button type="button" class="avatar-btn" id="avatarBtn" aria-haspopup="true" aria-expanded="false">' +
-      (yo.username || '?').charAt(0).toUpperCase() +
+      escapeHTML((yo.username || '?').charAt(0).toUpperCase()) +
     '</button>' +
     '<div class="acc-menu" id="accMenu">' +
-      '<div class="acc-who"><b>' + yo.username + '</b> · ' + yo.tarjeta + '</div>' +
+      '<div class="acc-who"><b>' + escapeHTML(yo.username) + '</b> · ' + escapeHTML(yo.tarjeta) + '</div>' +
       '<div class="acc-actions">' +
         '<button type="button" class="acc-item" onclick="toggleCambiarPassword(true)">Cambiar contraseña</button>' +
         '<button type="button" class="acc-item" onclick="cerrarSesion()">Cerrar sesión</button>' +
@@ -105,7 +129,9 @@ async function inicializar(){
   verificarRecordatorio();
   cargarResumen();
   cargarHeatmap();
-  cargarFaltantesMes();
+  // cargarFaltantesMes() no se llama acá: ya la dispara cargarSubtareas()
+  // (llamada arriba, directo o vía cargarTarjetas()) para evitar un
+  // segundo pedido duplicado en cada carga de la app.
 }
 
 // En mobile el avatar abre un menú desplegable con las acciones de cuenta
@@ -238,7 +264,7 @@ function renderGraficoSubtareas(porSubtarea){
   const maxHoras = Math.max(...porSubtarea.map(s => s.horas));
   cont.innerHTML = porSubtarea.map(s => `
     <div class="barra-fila">
-      <span class="barra-label" title="${s.subtarea.replace(/"/g,'&quot;')}">${s.subtarea}</span>
+      <span class="barra-label" title="${escapeHTML(s.subtarea)}">${escapeHTML(s.subtarea)}</span>
       <div class="barra-track"><div class="barra-fill" style="width:${(s.horas / maxHoras * 100).toFixed(0)}%"></div></div>
       <span class="barra-valor">${s.horas.toFixed(1)}h</span>
     </div>`).join('');
@@ -282,7 +308,7 @@ async function cargarFaltantesMes(){
     const data = await res.json();
 
     if(data.error){
-      cont.innerHTML = '<p class="empty">' + data.error + '</p>';
+      cont.innerHTML = '<p class="empty">' + escapeHTML(data.error) + '</p>';
       return;
     }
     if(data.faltantes.length === 0){
@@ -350,6 +376,39 @@ function cerrarSesion(){
   document.getElementById('loginStatus').textContent = '';
 }
 
+// Atrapa el foco de teclado (Tab/Shift+Tab) dentro de un modal abierto, y
+// cierra con Escape - sin esto, Tab puede escapar al contenido de atrás y
+// un lector de pantalla no sabe que hay un diálogo modal activo. Devuelve
+// una función para soltar el trap cuando se cierra el modal.
+function _elementosFocuseables(contenedor){
+  return Array.from(contenedor.querySelectorAll(
+    'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+  )).filter(el => el.offsetParent !== null);
+}
+
+function _atraparFoco(contenedor, alCerrar){
+  function onKeydown(e){
+    if(e.key === 'Escape'){
+      alCerrar();
+      return;
+    }
+    if(e.key !== 'Tab') return;
+    const focuseables = _elementosFocuseables(contenedor);
+    if(focuseables.length === 0) return;
+    const primero = focuseables[0];
+    const ultimo = focuseables[focuseables.length - 1];
+    if(e.shiftKey && document.activeElement === primero){
+      e.preventDefault();
+      ultimo.focus();
+    } else if(!e.shiftKey && document.activeElement === ultimo){
+      e.preventDefault();
+      primero.focus();
+    }
+  }
+  document.addEventListener('keydown', onKeydown);
+  return () => document.removeEventListener('keydown', onKeydown);
+}
+
 function _modalGenerico({titulo, mensaje, conInput, valorInicial, tipoInput, textoAceptar, soloAceptar}){
   return new Promise(resolve => {
     const backdrop = document.getElementById('modalGenericoBackdrop');
@@ -370,11 +429,13 @@ function _modalGenerico({titulo, mensaje, conInput, valorInicial, tipoInput, tex
       inputEl.style.display = 'none';
     }
 
+    let soltarFoco = null;
     function limpiar(){
       backdrop.style.display = 'none';
       btnAceptar.onclick = null;
       btnCancelar.onclick = null;
       inputEl.onkeydown = null;
+      if(soltarFoco){ soltarFoco(); soltarFoco = null; }
     }
     function aceptar(){
       const valor = conInput ? inputEl.value : true;
@@ -391,6 +452,7 @@ function _modalGenerico({titulo, mensaje, conInput, valorInicial, tipoInput, tex
     inputEl.onkeydown = e => { if(e.key === 'Enter') aceptar(); };
 
     backdrop.style.display = 'flex';
+    soltarFoco = _atraparFoco(backdrop.querySelector('.modal'), cancelar);
     setTimeout(() => (conInput ? inputEl : btnAceptar).focus(), 30);
   });
 }
@@ -412,13 +474,21 @@ function mostrarAlerta(mensaje, titulo){
   return _modalGenerico({titulo: titulo || 'Aviso', mensaje, soloAceptar: true, textoAceptar: 'Aceptar'});
 }
 
+let _soltarFocoCP = null;
+
 function toggleCambiarPassword(mostrar){
-  document.getElementById('cambiarPasswordBackdrop').style.display = mostrar ? 'flex' : 'none';
+  const backdrop = document.getElementById('cambiarPasswordBackdrop');
+  backdrop.style.display = mostrar ? 'flex' : 'none';
   if(mostrar){
     document.getElementById('cpActual').value = '';
     document.getElementById('cpNueva').value = '';
     document.getElementById('cpConfirmar').value = '';
     document.getElementById('cpStatus').textContent = '';
+    _soltarFocoCP = _atraparFoco(backdrop.querySelector('.modal'), () => toggleCambiarPassword(false));
+    setTimeout(() => document.getElementById('cpActual').focus(), 30);
+  } else if(_soltarFocoCP){
+    _soltarFocoCP();
+    _soltarFocoCP = null;
   }
 }
 
@@ -516,7 +586,7 @@ function renderChipsDescripcion(lineas){
   const unicas = [...new Set(lineas.map(l => l.name).filter(Boolean))].slice(0, 5);
   if(unicas.length === 0){ cont.innerHTML = ''; return; }
   cont.innerHTML = unicas.map(desc =>
-    `<button type="button" class="chip" title="${desc.replace(/"/g,'&quot;')}" onclick="usarDescripcion(this)">${desc}</button>`
+    `<button type="button" class="chip" title="${escapeHTML(desc)}" onclick="usarDescripcion(this)">${escapeHTML(desc)}</button>`
   ).join('');
 }
 
@@ -529,7 +599,7 @@ async function cargarTarjetas(){
   try{
     const res = await api('/api/tarjetas');
     const tarjetas = await res.json();
-    const opciones = tarjetas.map(t => `<option value="${t.name}">${t.name}</option>`).join('');
+    const opciones = tarjetas.map(t => `<option value="${escapeHTML(t.name)}">${escapeHTML(t.name)}</option>`).join('');
     sel.innerHTML = opciones;
     // Como admin, el desplegable trae todas las tarjetas del proyecto:
     // preseleccionamos la última usada (si seguís logueado en el mismo
@@ -546,7 +616,7 @@ async function cargarTarjetas(){
     cargarSubtareas();
   } catch(e){
     sel.innerHTML = '<option>Error cargando tarjetas</option>';
-    mostrarStatus('No se pudo conectar al backend (' + e.message + '). ¿Está corriendo backend_odoo.py?', 'err');
+    mostrarStatus('No se pudo conectar al backend (' + escapeHTML(e.message) + '). ¿Está corriendo backend_odoo.py?', 'err');
   }
 }
 
@@ -561,12 +631,12 @@ async function cargarUsuarios(){
     }
     tbody.innerHTML = usuarios.map(u => `
       <tr>
-        <td class="desc">${u.username}</td>
-        <td class="desc">${u.tarjeta}</td>
+        <td class="desc">${escapeHTML(u.username)}</td>
+        <td class="desc">${escapeHTML(u.tarjeta)}</td>
         <td>${u.es_admin ? '<span class="tag">admin</span>' : ''}</td>
         <td style="white-space:nowrap;">
-          <button type="button" class="del" onclick="resetearPasswordUsuario('${u.username}')" title="Resetear contraseña">🔑</button>
-          <button type="button" class="del" onclick="eliminarUsuarioAdmin('${u.username}')" title="Eliminar">🗑</button>
+          <button type="button" class="del" onclick="resetearPasswordUsuario(${jsAttr(u.username)})" title="Resetear contraseña" aria-label="Resetear contraseña">🔑</button>
+          <button type="button" class="del" onclick="eliminarUsuarioAdmin(${jsAttr(u.username)})" title="Eliminar" aria-label="Eliminar">🗑</button>
         </td>
       </tr>`).join('');
   } catch(e){
@@ -589,10 +659,10 @@ async function cargarAuditoria(){
     }
     tbody.innerHTML = entradas.map(a => `
       <tr>
-        <td class="desc">${formatearFechaHora(a.ts)}</td>
-        <td class="desc">${a.actor}</td>
-        <td class="desc">${a.accion}</td>
-        <td class="desc">${a.detalle || '—'}</td>
+        <td class="desc">${escapeHTML(formatearFechaHora(a.ts))}</td>
+        <td class="desc">${escapeHTML(a.actor)}</td>
+        <td class="desc">${escapeHTML(a.accion)}</td>
+        <td class="desc">${escapeHTML(a.detalle || '—')}</td>
       </tr>`).join('');
   } catch(e){
     tbody.innerHTML = '<tr><td colspan="4" class="empty">Error cargando auditoría.</td></tr>';
@@ -688,7 +758,7 @@ async function cargarSubtareas(){
   try{
     const res = await api('/api/subtareas?tarjeta=' + encodeURIComponent(tarjeta));
     const subtareas = await res.json();
-    selSub.innerHTML = subtareas.map(s => `<option value="${s.name}">${s.name}</option>`).join('');
+    selSub.innerHTML = subtareas.map(s => `<option value="${escapeHTML(s.name)}">${escapeHTML(s.name)}</option>`).join('');
     selSub.disabled = false;
     const ultimaSubtarea = localStorage.getItem(ultimaSubtareaKey(tarjeta));
     if(ultimaSubtarea && subtareas.some(s => s.name === ultimaSubtarea)){
@@ -734,7 +804,7 @@ async function cargarHistorial(){
     const res = await api(url);
     const data = await res.json();
     if(data.error){
-      tbody.innerHTML = '<tr><td colspan="3" class="empty">' + data.error + '</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="3" class="empty">' + escapeHTML(data.error) + '</td></tr>';
       return;
     }
     if(data.lineas.length === 0){
@@ -761,7 +831,7 @@ function renderFilasHistorial(lineas){
     <tr>
       <td class="desc">${formatearFecha(l.date)}</td>
       <td class="hrs">${l.unit_amount.toFixed(2)}h</td>
-      <td class="desc">${l.name || '—'}</td>
+      <td class="desc">${escapeHTML(l.name || '—')}</td>
     </tr>`).join('');
 }
 
@@ -811,7 +881,7 @@ async function registrarEnOdoo(){
     const data = await res.json();
 
     if(!res.ok || data.error){
-      mostrarStatus('Error: ' + (data.error || res.statusText), 'err');
+      mostrarStatus('Error: ' + escapeHTML(data.error || res.statusText), 'err');
       btn.disabled = false;
       return;
     }
@@ -824,7 +894,7 @@ async function registrarEnOdoo(){
     cargarHeatmap();
     cargarFaltantesMes();
   } catch(e){
-    mostrarStatus('No se pudo conectar al backend: ' + e.message, 'err');
+    mostrarStatus('No se pudo conectar al backend: ' + escapeHTML(e.message), 'err');
   } finally {
     btn.disabled = false;
   }
@@ -870,7 +940,7 @@ async function registrarEnLote(){
       });
       const data = await res.json();
       if(!res.ok || data.error){
-        mostrarStatus('Se registraron ' + creados + ' de ' + dias.length + ' días. Error en ' + formatearFecha(fecha) + ': ' + (data.error || res.statusText), 'err');
+        mostrarStatus('Se registraron ' + creados + ' de ' + dias.length + ' días. Error en ' + formatearFecha(fecha) + ': ' + escapeHTML(data.error || res.statusText), 'err');
         btn.disabled = false;
         cargarHistorial();
         cargarResumen();
@@ -880,7 +950,7 @@ async function registrarEnLote(){
       }
       creados++;
     } catch(e){
-      mostrarStatus('Se registraron ' + creados + ' de ' + dias.length + ' días. Se cortó la conexión: ' + e.message, 'err');
+      mostrarStatus('Se registraron ' + creados + ' de ' + dias.length + ' días. Se cortó la conexión: ' + escapeHTML(e.message), 'err');
       btn.disabled = false;
       cargarHistorial();
       cargarResumen();
@@ -915,7 +985,7 @@ async function deshacer(id){
       mostrarStatus('No se pudo deshacer.', 'err');
     }
   } catch(e){
-    mostrarStatus('Error al deshacer: ' + e.message, 'err');
+    mostrarStatus('Error al deshacer: ' + escapeHTML(e.message), 'err');
   }
 }
 
@@ -997,11 +1067,17 @@ function exportarExcel(){
 
 let LINEAS_DIA_ACTUAL = [];
 let SUBTAREAS_CACHE = null;
+let SUBTAREAS_CACHE_TARJETA = null;
 
 async function subtareasParaEditor(){
-  if(SUBTAREAS_CACHE) return SUBTAREAS_CACHE;
-  const res = await api('/api/subtareas?tarjeta=' + encodeURIComponent(tarjetaActual()));
+  const tarjeta = tarjetaActual();
+  // Cacheado junto con la tarjeta a la que corresponde: si un admin cambia
+  // de tarjeta, no queremos mostrarle (ni dejarle guardar) subtareas de la
+  // tarjeta anterior.
+  if(SUBTAREAS_CACHE && SUBTAREAS_CACHE_TARJETA === tarjeta) return SUBTAREAS_CACHE;
+  const res = await api('/api/subtareas?tarjeta=' + encodeURIComponent(tarjeta));
   SUBTAREAS_CACHE = await res.json();
+  SUBTAREAS_CACHE_TARJETA = tarjeta;
   return SUBTAREAS_CACHE;
 }
 
@@ -1027,7 +1103,7 @@ async function consultarDia(){
     const data = await res.json();
 
     if(data.error){
-      tbody.innerHTML = '<tr><td colspan="4" class="empty">' + data.error + '</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="4" class="empty">' + escapeHTML(data.error) + '</td></tr>';
       return;
     }
     if(data.lineas.length === 0){
@@ -1050,18 +1126,31 @@ function renderTablaDia(){
   const tbody = document.getElementById('tbodyDia');
   tbody.innerHTML = LINEAS_DIA_ACTUAL.map(l => `
     <tr id="fila-dia-${l.id}">
-      <td><span class="tag">${l.subtarea}</span></td>
+      <td><span class="tag">${escapeHTML(l.subtarea)}</span></td>
       <td class="hrs">${l.horas.toFixed(2)}h</td>
-      <td class="desc">${l.descripcion || '—'}</td>
+      <td class="desc">${escapeHTML(l.descripcion || '—')}</td>
       <td style="white-space:nowrap;">
-        <button type="button" class="del" style="color:var(--text-dim);" onclick="activarEdicion(${l.id})" title="Editar">✎</button>
-        <button type="button" class="del" onclick="eliminarLineaDia(${l.id})" title="Eliminar">🗑</button>
+        <button type="button" class="del" style="color:var(--text-dim);" onclick="activarEdicion(${l.id})" title="Editar" aria-label="Editar">✎</button>
+        <button type="button" class="del" onclick="eliminarLineaDia(${l.id})" title="Eliminar" aria-label="Eliminar">🗑</button>
       </td>
     </tr>`).join('');
 }
 
+function mostrarStatusDia(html, tipo){
+  const el = document.getElementById('statusDia');
+  el.className = 'status' + (tipo ? ' ' + tipo : '');
+  el.innerHTML = html;
+}
+
+// No se puede "des-borrar" del lado de Odoo: deshacer una eliminación
+// significa volver a crear la línea con los mismos datos. Guardamos acá lo
+// necesario para recrearla (incluida la tarjeta, para no terminar creándola
+// en la tarjeta equivocada si el admin la cambió mientras tanto).
+let ULTIMA_LINEA_ELIMINADA_DIA = null;
+
 async function eliminarLineaDia(id){
-  const ok = await confirmarAccion('¿Eliminar esta entrada? Esta acción no se puede deshacer.', 'Eliminar entrada', 'Eliminar');
+  const linea = LINEAS_DIA_ACTUAL.find(l => l.id === id);
+  const ok = await confirmarAccion('¿Eliminar esta entrada?', 'Eliminar entrada', 'Eliminar');
   if(!ok) return;
   try{
     const res = await api('/api/timesheet/' + id + '?tarjeta=' + encodeURIComponent(tarjetaActual()), { method: 'DELETE' });
@@ -1070,12 +1159,48 @@ async function eliminarLineaDia(id){
       await mostrarAlerta('Error al eliminar: ' + (data.error || res.statusText));
       return;
     }
+    ULTIMA_LINEA_ELIMINADA_DIA = linea ? {
+      tarjeta: tarjetaActual(),
+      subtarea: linea.subtarea,
+      fecha: document.getElementById('fechaConsulta').value,
+      horas: linea.horas,
+      detalle: linea.descripcion,
+    } : null;
+    await consultarDia();
+    cargarResumen();
+    cargarHeatmap();
+    cargarFaltantesMes();
+    if(ULTIMA_LINEA_ELIMINADA_DIA){
+      mostrarStatusDia('Entrada eliminada. <a href="#" onclick="deshacerEliminacionDia(); return false;" style="color:var(--accent)">Deshacer</a>', 'ok');
+    }
+  } catch(e){
+    await mostrarAlerta('No se pudo conectar al backend: ' + e.message);
+  }
+}
+
+async function deshacerEliminacionDia(){
+  const datos = ULTIMA_LINEA_ELIMINADA_DIA;
+  if(!datos) return;
+  ULTIMA_LINEA_ELIMINADA_DIA = null;
+  mostrarStatusDia('Restaurando...');
+  try{
+    const res = await api('/api/timesheet', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(datos)
+    });
+    const data = await res.json();
+    if(!res.ok || data.error){
+      mostrarStatusDia('No se pudo restaurar: ' + escapeHTML(data.error || res.statusText), 'err');
+      return;
+    }
+    mostrarStatusDia('Entrada restaurada.', 'ok');
     consultarDia();
     cargarResumen();
     cargarHeatmap();
     cargarFaltantesMes();
   } catch(e){
-    await mostrarAlerta('No se pudo conectar al backend: ' + e.message);
+    mostrarStatusDia('No se pudo conectar al backend: ' + escapeHTML(e.message), 'err');
   }
 }
 
@@ -1088,22 +1213,29 @@ async function activarEdicion(id){
   fila.innerHTML = `
     <td>
       <select id="edit-subtarea-${id}" style="font-size:12.5px; padding:5px 6px;">
-        ${subtareas.map(s => `<option value="${s.name}" ${s.name === linea.subtarea ? 'selected' : ''}>${s.name}</option>`).join('')}
+        ${subtareas.map(s => `<option value="${escapeHTML(s.name)}" ${s.name === linea.subtarea ? 'selected' : ''}>${escapeHTML(s.name)}</option>`).join('')}
       </select>
     </td>
     <td><input type="number" id="edit-horas-${id}" value="${linea.horas}" step="0.25" min="0.25" style="font-size:12.5px; padding:5px 6px;"></td>
-    <td><input type="text" id="edit-detalle-${id}" value="${(linea.descripcion || '').replace(/"/g,'&quot;')}" style="font-size:12.5px; padding:5px 6px;"></td>
+    <td><input type="text" id="edit-detalle-${id}" value="${escapeHTML(linea.descripcion || '')}" style="font-size:12.5px; padding:5px 6px;"></td>
     <td style="white-space:nowrap;">
-      <button type="button" class="del" style="color:var(--ok);" onclick="guardarEdicion(${id})" title="Guardar">✓</button>
-      <button type="button" class="del" onclick="renderTablaDia()" title="Cancelar">✕</button>
+      <button type="button" class="del" style="color:var(--ok);" onclick="guardarEdicion(${id})" title="Guardar" aria-label="Guardar">✓</button>
+      <button type="button" class="del" onclick="renderTablaDia()" title="Cancelar" aria-label="Cancelar edición">✕</button>
     </td>`;
 }
 
+let ULTIMA_EDICION_DIA = null;
+
 async function guardarEdicion(id){
+  const linea = LINEAS_DIA_ACTUAL.find(l => l.id === id);
   const subtarea = document.getElementById('edit-subtarea-' + id).value;
   const horas = parseFloat(document.getElementById('edit-horas-' + id).value);
   const detalle = document.getElementById('edit-detalle-' + id).value.trim();
 
+  if(!horas || horas <= 0){
+    await mostrarAlerta('Las horas deben ser un número mayor a 0.');
+    return;
+  }
   if(horas > UMBRAL_HORAS_ALTAS){
     const seguro = await confirmarAccion('Vas a dejar esta entrada en ' + horas + ' horas. ¿Es correcto? (parece un valor alto, revisá que no sea un error de tipeo)', 'Confirmar horas');
     if(!seguro) return;
@@ -1120,12 +1252,45 @@ async function guardarEdicion(id){
       await mostrarAlerta('Error al guardar: ' + (data.error || res.statusText));
       return;
     }
+    ULTIMA_EDICION_DIA = linea ? {
+      id, tarjeta: tarjetaActual(),
+      subtarea: linea.subtarea, horas: linea.horas, detalle: linea.descripcion,
+    } : null;
+    await consultarDia();
+    cargarResumen();
+    cargarHeatmap();
+    cargarFaltantesMes();
+    if(ULTIMA_EDICION_DIA){
+      mostrarStatusDia('Cambios guardados. <a href="#" onclick="deshacerEdicionDia(); return false;" style="color:var(--accent)">Deshacer</a>', 'ok');
+    }
+  } catch(e){
+    await mostrarAlerta('No se pudo conectar al backend: ' + e.message);
+  }
+}
+
+async function deshacerEdicionDia(){
+  const datos = ULTIMA_EDICION_DIA;
+  if(!datos) return;
+  ULTIMA_EDICION_DIA = null;
+  mostrarStatusDia('Deshaciendo...');
+  try{
+    const res = await api('/api/timesheet/' + datos.id, {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({tarjeta: datos.tarjeta, subtarea: datos.subtarea, horas: datos.horas, detalle: datos.detalle})
+    });
+    const data = await res.json();
+    if(!res.ok || data.error){
+      mostrarStatusDia('No se pudo deshacer: ' + escapeHTML(data.error || res.statusText), 'err');
+      return;
+    }
+    mostrarStatusDia('Cambios revertidos.', 'ok');
     consultarDia();
     cargarResumen();
     cargarHeatmap();
     cargarFaltantesMes();
   } catch(e){
-    await mostrarAlerta('No se pudo conectar al backend: ' + e.message);
+    mostrarStatusDia('No se pudo conectar al backend: ' + escapeHTML(e.message), 'err');
   }
 }
 
@@ -1141,7 +1306,7 @@ async function revisarDiasFaltantes(){
     const data = await res.json();
 
     if(data.error){
-      cont.innerHTML = '<div class="status err">' + data.error + '</div>';
+      cont.innerHTML = '<div class="status err">' + escapeHTML(data.error) + '</div>';
       return;
     }
     if(data.faltantes.length === 0){

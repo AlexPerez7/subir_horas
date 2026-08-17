@@ -198,18 +198,21 @@ Pestaña **Actions → Recordatorio de horas por Telegram → Run workflow** (y 
 Además de los avisos automáticos, le podés escribir directo al bot en Telegram. Esto es distinto de los workflows de arriba: en vez de un job periódico que empuja un mensaje, es un **webhook** — Telegram le pega un `POST` a tu backend en Render cada vez que le escribís (o tocás un botón), y el backend responde en el momento (`POST /api/telegram-webhook` en [`backend_odoo.py`](backend_odoo.py)).
 
 Entiende:
+- `/vincular <usuario> <contraseña>` → asocia ese chat de Telegram a tu cuenta de la app (las mismas credenciales del login web). Hace falta hacerlo una sola vez por chat antes de poder usar el resto de los comandos.
 - `/resumen` o **"resumen de esta semana"** → total de horas de la semana y el mes, con el detalle por subtarea.
 - `/faltantes` o **"¿qué días no he subido horas?"** → días hábiles sin cargar de los últimos 10, cada uno con un botón para arrancar la carga de ese día.
 - **"2h hoy: reunión con cliente"** → registra horas directo desde el chat. El bot entiende `hoy`, `ayer` o una fecha `dd/mm`, y la cantidad de horas (`2h`, `1,5 horas`); como Telegram no tiene forma de mandar un desplegable, la subtarea se elige tocando uno de los botones que te ofrece después.
+- `/desvincular` → olvida el vínculo de ese chat (por si vas a re-vincularlo a otra cuenta, o dejás de usar el bot).
 
-El bot solo responde a mensajes y toques de botón que vengan de `TELEGRAM_CHAT_ID`; si alguien más le escribe (por ejemplo si el username del bot se filtra), el backend los ignora en silencio — nadie más puede ver tus horas ni cargar horas a tu nombre.
+El bot es **multiusuario**: cualquier cuenta de la app puede vincular su propio chat de Telegram con `/vincular` y usar el bot para su propia tarjeta — no hace falta ser el admin. Un chat sin vincular solo puede usar `/vincular`; para cualquier otro mensaje, el bot pide que te vincules primero. `/vincular` está protegido contra fuerza bruta igual que el login web (se bloquea 5 minutos tras 5 intentos fallidos desde el mismo chat).
 
 **1. Variables de entorno en Render**
 
 Además de `CRON_SECRET`, cargá en Render (no en GitHub — estas las usa el backend, no un workflow):
 - `TELEGRAM_BOT_TOKEN` — el mismo token de BotFather.
-- `TELEGRAM_CHAT_ID` — el mismo id que sacaste antes.
 - `TELEGRAM_WEBHOOK_SECRET` — una cadena aleatoria nueva (generarla igual que `SECRET_KEY`). Es el mecanismo con el que el backend verifica que el `POST` realmente viene de Telegram y no de cualquiera que le pegue a la URL.
+
+(No hace falta `TELEGRAM_CHAT_ID` acá — esa variable la sigue necesitando, aparte, el paso 3 de más arriba, "Cargar los secrets en GitHub", para los workflows de recordatorio/resumen semanal.)
 
 **2. Registrar el webhook en Telegram (una sola vez)**
 
@@ -223,15 +226,15 @@ Debería responder `{"ok":true,"result":true,...}`. A partir de ahí, cualquier 
 
 **3. Registrar los comandos en Telegram (opcional, una sola vez)**
 
-Para que `/resumen`, `/faltantes` y `/ayuda` aparezcan en el menú "/" del chat en vez de tener que acordarte de tipearlos:
+Para que `/vincular`, `/resumen`, `/faltantes` y `/ayuda` aparezcan en el menú "/" del chat en vez de tener que acordarte de tipearlos:
 ```powershell
 curl -X POST "https://api.telegram.org/bot<TOKEN>/setMyCommands" `
-  -d "commands=[{\"command\":\"resumen\",\"description\":\"Horas de esta semana y este mes\"},{\"command\":\"faltantes\",\"description\":\"Días hábiles sin cargar\"},{\"command\":\"registrar\",\"description\":\"Cómo cargar horas por chat\"},{\"command\":\"ayuda\",\"description\":\"Qué puede hacer el bot\"}]"
+  -d "commands=[{\"command\":\"vincular\",\"description\":\"Vincular este chat a tu cuenta\"},{\"command\":\"resumen\",\"description\":\"Horas de esta semana y este mes\"},{\"command\":\"faltantes\",\"description\":\"Días hábiles sin cargar\"},{\"command\":\"registrar\",\"description\":\"Cómo cargar horas por chat\"},{\"command\":\"ayuda\",\"description\":\"Qué puede hacer el bot\"},{\"command\":\"desvincular\",\"description\":\"Olvidar el vínculo de este chat\"}]"
 ```
 
 **4. Probar**
 
-Escribile al bot "resumen" o "¿qué días no he subido horas?" desde Telegram. Si el backend estaba dormido (Render free), la primera respuesta puede tardar hasta un minuto en llegar (arranque en frío) — es normal.
+Escribile al bot `/vincular tu-usuario tu-contraseña` (las mismas credenciales del login web) y después "resumen" o "¿qué días no he subido horas?" desde Telegram. Si el backend estaba dormido (Render free), la primera respuesta puede tardar hasta un minuto en llegar (arranque en frío) — es normal.
 
 ---
 
@@ -329,7 +332,7 @@ subir_horas/
 - Si el token llegara a exponerse accidentalmente (capturas, commit erróneo, etc.), hay que **rotarlo** en Odoo lo antes posible.
 - `usuarios.db` guarda contraseñas **hasheadas** (`werkzeug.security`), nunca en texto plano — aun así, nunca se sube a git.
 - CORS en el backend está restringido a los orígenes listados en `FRONTEND_ORIGINS` (no `CORS(app)` abierto). Si en algún momento agregás otro dominio desde el que se sirva el frontend, hay que sumarlo ahí.
-- El webhook del bot de Telegram (`POST /api/telegram-webhook`) valida el header `X-Telegram-Bot-Api-Secret-Token` contra `TELEGRAM_WEBHOOK_SECRET` y además ignora cualquier mensaje que no venga de `TELEGRAM_CHAT_ID` — sin eso, cualquiera que encontrara el username del bot podría preguntarle tus horas.
+- El webhook del bot de Telegram (`POST /api/telegram-webhook`) valida el header `X-Telegram-Bot-Api-Secret-Token` contra `TELEGRAM_WEBHOOK_SECRET`, y además cada chat tiene que vincularse a una cuenta con `/vincular <usuario> <contraseña>` (protegido contra fuerza bruta igual que el login web) antes de poder ver horas o cargarlas — sin vincular, el bot solo responde pidiendo que te vincules. A diferencia del esquema anterior (un único `TELEGRAM_CHAT_ID` fijo, que ignoraba en silencio cualquier otro chat), el bot ahora es descubrible por cualquiera que encuentre su username, así que la única barrera es la contraseña de cada cuenta — no hace falta el username del bot para ser privado, hace falta la contraseña.
 - El login se bloquea 5 minutos para un usuario tras 5 intentos fallidos seguidos (mitiga fuerza bruta básica). El contador vive en memoria del proceso — se resetea en cada redeploy, y solo funciona porque el `Procfile` corre un único worker de gunicorn (si en algún momento se agregan más workers, este esquema necesitaría un store compartido tipo Redis).
 - El login usa un **token firmado** (`itsdangerous`, con `SECRET_KEY`), no una cookie — se eligió así porque las cookies cross-site (`SameSite=None; Secure`) quedan bloqueadas por defecto en varios navegadores (Safari, Brave, Samsung Internet). El token vive en `localStorage` del navegador y viaja en el header `Authorization`. Expira solo a las `SESSION_LIFETIME_HORAS` de haberse emitido (no hay forma de invalidarlo antes de tiempo del lado del servidor — es la contra de no guardar estado de sesión; "cerrar sesión" simplemente lo borra del navegador). Si se filtra un token, expira solo; si hace falta invalidar algo antes, hay que rotar `SECRET_KEY` (invalida *todos* los tokens activos, no solo uno).
 - El sitio publicado en GitHub Pages es **público en internet** aunque el repositorio sea privado (ver nota en [Publicar el frontend](#publicar-el-frontend-en-github-pages)). El login es lo único que protege el acceso a los datos de horas.
