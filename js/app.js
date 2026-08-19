@@ -879,6 +879,8 @@ async function cargarHistorial(){
     renderChipsDescripcion(data.lineas);
     HISTORIAL_ACTUAL = data.lineas;
     document.getElementById('buscarHistorial').value = '';
+    document.getElementById('buscarGlobalToggle').checked = false;
+    document.getElementById('thSubtareaHistorial').style.display = 'none';
   } catch(e){
     tbody.innerHTML = '<tr><td colspan="3" class="empty">Error cargando historial.</td></tr>';
   }
@@ -889,9 +891,10 @@ function formatearFecha(iso){
   return d + '/' + m + '/' + y;
 }
 
-function renderFilasHistorial(lineas){
+function renderFilasHistorial(lineas, conSubtarea){
   document.getElementById('tbodyOdoo').innerHTML = lineas.map(l => `
     <tr>
+      ${conSubtarea ? `<td class="desc">${escapeHTML(l.subtarea)}</td>` : ''}
       <td class="desc">${formatearFecha(l.date)}</td>
       <td class="hrs">${l.unit_amount.toFixed(2)}h</td>
       <td class="desc">${escapeHTML(l.name || '—')}</td>
@@ -908,6 +911,46 @@ function filtrarHistorial(){
     document.getElementById('tbodyOdoo').innerHTML = '<tr><td colspan="3" class="empty">Sin coincidencias.</td></tr>';
   } else {
     renderFilasHistorial(filtradas);
+  }
+}
+
+// Buscador global: a diferencia de filtrarHistorial (que solo filtra en
+// memoria lo ya cargado de la subtarea actual), le pega al backend para
+// buscar en TODAS las subtareas de la tarjeta - útil cuando no te acordás
+// bajo cuál cargaste algo. Debounced para no disparar un pedido por tecla.
+let _debounceBusquedaGlobal = null;
+
+function onBuscarHistorial(){
+  const esGlobal = document.getElementById('buscarGlobalToggle').checked;
+  document.getElementById('thSubtareaHistorial').style.display = esGlobal ? '' : 'none';
+  clearTimeout(_debounceBusquedaGlobal);
+  if(esGlobal){
+    _debounceBusquedaGlobal = setTimeout(buscarHistorialGlobal, 300);
+  } else {
+    filtrarHistorial();
+  }
+}
+
+async function buscarHistorialGlobal(){
+  const q = document.getElementById('buscarHistorial').value.trim();
+  const tbody = document.getElementById('tbodyOdoo');
+  if(!q){
+    tbody.innerHTML = '<tr><td colspan="4" class="empty">Escribí algo para buscar en todas tus subtareas.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = '<tr><td colspan="4" class="empty">Buscando...</td></tr>';
+  try{
+    const tarjeta = tarjetaActual();
+    const url = '/api/timesheet/buscar?tarjeta=' + encodeURIComponent(tarjeta) + '&q=' + encodeURIComponent(q);
+    const res = await api(url);
+    const data = await res.json();
+    if(data.lineas.length === 0){
+      tbody.innerHTML = '<tr><td colspan="4" class="empty">Sin coincidencias en ninguna subtarea.</td></tr>';
+      return;
+    }
+    renderFilasHistorial(data.lineas, true);
+  } catch(e){
+    tbody.innerHTML = '<tr><td colspan="4" class="empty">Error buscando.</td></tr>';
   }
 }
 

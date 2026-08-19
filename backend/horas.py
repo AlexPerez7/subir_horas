@@ -59,6 +59,24 @@ def _fecha_valida(valor):
         return False
 
 
+def parsear_fecha_busqueda(texto):
+    """Si 'texto' tiene forma dd/mm o dd/mm/aaaa (como lo escribe alguien en
+    el buscador), la interpreta con el año actual por defecto y la devuelve
+    en formato ISO (AAAA-MM-DD). Devuelve None si no matchea ese patrón."""
+    partes = texto.strip().split("/")
+    if len(partes) not in (2, 3) or not all(p.isdigit() for p in partes):
+        return None
+    dia = int(partes[0])
+    mes = int(partes[1])
+    anio = int(partes[2]) if len(partes) == 3 else date.today().year
+    if len(partes) == 3 and anio < 100:
+        anio += 2000
+    try:
+        return date(anio, mes, dia).isoformat()
+    except ValueError:
+        return None
+
+
 def _calcular_recordatorio(tarjeta):
     fecha_revisar = dia_habil_anterior(date.today())
     task_ids = odoo_client.subtareas_ids_de_tarjeta(tarjeta)

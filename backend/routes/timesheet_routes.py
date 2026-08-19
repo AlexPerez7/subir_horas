@@ -110,6 +110,55 @@ def timesheet_ultimo():
     }})
 
 
+@bp.route("/api/timesheet/buscar", methods=["GET"])
+def timesheet_buscar():
+    """
+    Uso: /api/timesheet/buscar?q=cliente
+    Busca en la descripción (y, si 'q' parece una fecha dd/mm o dd/mm/aaaa,
+    también por fecha exacta) en TODAS las subtareas de la tarjeta - a
+    diferencia de "Buscar en historial" del formulario, que solo filtra lo
+    ya cargado en pantalla para la subtarea seleccionada.
+    """
+    tarjeta = horas.tarjeta_de_la_request(request.args)
+    q = request.args.get("q", "").strip()
+    limite = int(request.args.get("limite", 50))
+    if not q:
+        return jsonify({"lineas": []})
+
+    task_ids = odoo_client.subtareas_ids_de_tarjeta(tarjeta)
+    if not task_ids:
+        return jsonify({"lineas": []})
+
+    fecha_iso = horas.parsear_fecha_busqueda(q)
+    if fecha_iso:
+        domain = ["&", ["task_id", "in", task_ids], "|", ["name", "ilike", q], ["date", "=", fecha_iso]]
+    else:
+        domain = [["task_id", "in", task_ids], ["name", "ilike", q]]
+
+    lineas = odoo_client.odoo_execute_kw(
+        "account.analytic.line", "search_read",
+        [domain],
+        {"fields": ["date", "name", "unit_amount", "task_id"], "order": "date desc, id desc", "limit": limite},
+    )
+
+    ids_unicos = list({l["task_id"][0] for l in lineas})
+    nombres = {}
+    if ids_unicos:
+        tareas = odoo_client.odoo_execute_kw("project.task", "read", [ids_unicos], {"fields": ["name"]})
+        nombres = {t["id"]: t["name"] for t in tareas}
+
+    resultado = [
+        {
+            "date": l["date"],
+            "unit_amount": l["unit_amount"],
+            "name": l["name"],
+            "subtarea": nombres.get(l["task_id"][0], l["task_id"][1]),
+        }
+        for l in lineas
+    ]
+    return jsonify({"lineas": resultado})
+
+
 @bp.route("/api/timesheet/dia", methods=["GET"])
 def timesheet_dia():
     """
