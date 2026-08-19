@@ -52,6 +52,17 @@ html[data-theme="dark"]{
   --err-border: rgba(179,38,30,.4);
   --warn-bg: rgba(163,105,10,.18);
   --warn-border: rgba(163,105,10,.4);
+
+  /* --ok/--warn/--err (definidos arriba en :root) son tonos pensados para
+     texto sobre fondos claros - en oscuro, ese mismo rojo/ámbar/verde
+     apagado pierde contraste contra el fondo casi negro (se ve "sucio",
+     poco legible, sobre todo en los chips de días faltantes y los
+     mensajes de status). Estos son los mismos tonos que ya usaba el tema
+     oscuro original de la app (antes del rediseño claro) para este caso -
+     valores ya probados como legibles sobre fondos oscuros. */
+  --ok: #4ADE80;
+  --warn: #F5C563;
+  --err: #F87171;
 }
 
 *{box-sizing:border-box;}
@@ -320,7 +331,12 @@ html[data-theme="dark"] .toggle-knob{ left:16px; background:var(--sky-500); }
   .sidebar-footer{ margin-top:auto; padding:0 10px; }
 
   .header-brand{ display:none; }
-  header{ justify-content:flex-end; padding:20px 32px; margin:-32px -24px 28px; border-bottom:1px solid var(--border-panel); background:var(--surface-panel); }
+  /* Antes usaba --surface-panel (el mismo tono "tarjeta" del sidebar):
+     en modo claro pasaba casi inadvertido (blanco sobre gris muy claro),
+     pero en oscuro el salto de contraste entre panel y página se nota
+     mucho más y quedaba como una barra destacada arriba, fuera de lugar.
+     Con --surface-page se funde con el contenido en los dos temas. */
+  header{ justify-content:flex-end; padding:20px 32px; margin:-32px -24px 28px; border-bottom:1px solid var(--border-panel); background:var(--surface-page); }
 
   /* El toggle de tema ya vive en el pie del sidebar en desktop; repetirlo
      en el menu de cuenta sería redundante (en mobile el sidebar está
