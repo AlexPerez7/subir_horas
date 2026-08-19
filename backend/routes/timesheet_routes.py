@@ -66,12 +66,15 @@ def timesheet_recientes():
         {"fields": ["date", "name", "unit_amount", "employee_id"],
          "order": "date desc, id desc", "limit": limite},
     )
-    todas = odoo_client.odoo_execute_kw(
-        "account.analytic.line", "search_read",
-        [[["task_id", "=", task_id]]],
-        {"fields": ["unit_amount"]},
+    # Suma agregada en el propio Odoo (read_group) en vez de traer todas las
+    # líneas de la subtarea para sumarlas en Python - con subtareas de
+    # historial largo (años de registros diarios) evita transferir cada fila
+    # solo para calcular un total.
+    grupos = odoo_client.odoo_execute_kw(
+        "account.analytic.line", "read_group",
+        [[["task_id", "=", task_id]], ["unit_amount:sum"], []],
     )
-    total_horas = sum(l["unit_amount"] for l in todas)
+    total_horas = grupos[0]["unit_amount"] if grupos else 0
 
     return jsonify({"lineas": lineas, "total_horas": total_horas})
 
