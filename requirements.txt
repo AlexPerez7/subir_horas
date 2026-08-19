@@ -2,6 +2,7 @@ flask
 flask-cors
 itsdangerous
 python-dotenv
+psycopg2-binary
 requests
 werkzeug
 gunicorn

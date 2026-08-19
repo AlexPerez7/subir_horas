@@ -11,6 +11,7 @@ Consiste en un formulario web estático (publicado en **GitHub Pages**) conectad
 - [Arquitectura](#arquitectura)
 - [Funcionalidades del formulario](#funcionalidades-del-formulario)
 - [Requisitos](#requisitos)
+- [Configurar Supabase (base de datos persistente)](#configurar-supabase-base-de-datos-persistente)
 - [Configuración inicial](#configuración-inicial)
 - [Modo desarrollo (local)](#modo-desarrollo-local)
 - [Desplegar el backend en Render](#desplegar-el-backend-en-render)
@@ -36,13 +37,13 @@ Consiste en un formulario web estático (publicado en **GitHub Pages**) conectad
 │  estático, sin build)  │ ◄─────────────────────── │  Render)         │                          └──────┘
 └──────────────────────┘                           └──────────────────┘
                                                               │
-                                                       SQLite (usuarios.db)
+                                                     Postgres (Supabase)
                                                      login / tarjeta por usuario
 ```
 
 - **`index.html`** — formulario standalone (HTML + CSS + JS, sin frameworks ni build step). Permite elegir tarjeta, subtarea, fecha, horas y descripción; muestra en vivo el historial real de esa subtarea en Odoo. No tiene ningún secreto embebido — solo la URL pública del backend. Se publica tal cual en GitHub Pages.
-- **`backend_odoo.py` + el paquete `backend/`** — API Flask (JSON puro) que hace de intermediaria con Odoo y gestiona el login propio de la app (usuario/contraseña, token de sesión firmado, tabla `usuarios` en SQLite). Nunca se llama a Odoo directo desde el navegador (evita exponer el token de API). Se despliega en Render, separado del frontend. Ver [Estructura del proyecto](#estructura-del-proyecto) para cómo está dividido el paquete.
-- **`scripts/crear_usuario.py`** — CLI para crear cuentas o resetear contraseñas en `usuarios.db`. Se corre del lado del backend desplegado (ver [Gestión de usuarios](#gestión-de-usuarios)).
+- **`backend_odoo.py` + el paquete `backend/`** — API Flask (JSON puro) que hace de intermediaria con Odoo y gestiona el login propio de la app (usuario/contraseña, token de sesión firmado, tabla `usuarios` en Postgres). Nunca se llama a Odoo directo desde el navegador (evita exponer el token de API). Se despliega en Render, separado del frontend. Ver [Estructura del proyecto](#estructura-del-proyecto) para cómo está dividido el paquete.
+- **`scripts/crear_usuario.py`** — CLI para crear cuentas o resetear contraseñas. Se corre desde tu máquina local, apuntando a la misma base de Supabase que usa producción (ver [Gestión de usuarios](#gestión-de-usuarios)).
 
 Como el frontend y el backend viven en dominios distintos (`*.github.io` vs `*.onrender.com`), la comunicación es cross-origin. La autenticación **no usa cookies**: muchos navegadores (Safari, Brave, Samsung Internet, y cada vez más) bloquean por defecto las cookies "de terceros" aunque tengan `SameSite=None; Secure`, lo que rompería el login. En cambio, `/api/login` devuelve un token firmado que el frontend guarda en `localStorage` y manda como header `Authorization: Bearer <token>` en cada pedido — no depende de ninguna política de cookies del navegador. El backend restringe CORS al origen exacto del sitio de GitHub Pages.
 
@@ -72,15 +73,26 @@ Además de cargar/editar/eliminar horas y ver el historial en vivo:
   pip install -r requirements.txt
   ```
 - Acceso a Odoo con un usuario/token que tenga permisos de lectura/escritura sobre `project.task`, `account.analytic.line` y `hr.employee`.
-- Una cuenta de GitHub (para Pages) y una cuenta de Render (para el backend) — ambas gratuitas.
+- Una cuenta de GitHub (para Pages), una cuenta de Render (para el backend) y una cuenta de Supabase (para la base de datos de usuarios) — las tres gratuitas.
+
+---
+
+## Configurar Supabase (base de datos persistente)
+
+Los usuarios de la app (login, auditoría, vínculos de Telegram) se guardan en Postgres, en un proyecto de [Supabase](https://supabase.com) — free tier, con almacenamiento persistente de verdad (a diferencia del disco de Render, ver [Limitaciones del plan free de Render](#desplegar-el-backend-en-render)).
+
+1. Creá una cuenta en [supabase.com](https://supabase.com) y un proyecto nuevo (elegí una contraseña de base de datos y guardala, la vas a necesitar).
+2. En el proyecto: **Project Settings → Database → Connection string**, pestaña **Transaction** (puerto `6543`, **no** la de conexión directa — esa requiere IPv6 de salida, que Render no soporta). Copiá la URI completa y reemplazá `[YOUR-PASSWORD]` por la contraseña que elegiste.
+3. Esa URI es tu `DATABASE_URL` — va en tu `.env` local y en las variables de entorno de Render (ver [Desplegar el backend en Render](#desplegar-el-backend-en-render)).
+4. No hace falta crear las tablas a mano: el backend las crea solo al arrancar (`CREATE TABLE IF NOT EXISTS`, ver [`backend/db.py`](backend/db.py)) — tanto la primera vez como si en algún momento recreás el proyecto de Supabase desde cero.
 
 ---
 
 ## Configuración inicial
 
 1. Copia [`.env.example`](.env.example) como `.env` (mismo nivel que `backend_odoo.py`).
-2. Completa con tus credenciales reales de Odoo, una `SECRET_KEY` propia y, más adelante, la URL de tu sitio de GitHub Pages en `FRONTEND_ORIGINS`.
-3. **`.env` nunca se sube a git** (está en `.gitignore`), tampoco `usuarios.db` (contiene hashes de contraseñas reales).
+2. Completa con tus credenciales reales de Odoo, una `SECRET_KEY` propia, el `DATABASE_URL` de Supabase (ver arriba) y, más adelante, la URL de tu sitio de GitHub Pages en `FRONTEND_ORIGINS`.
+3. **`.env` nunca se sube a git** (está en `.gitignore`) — contiene el token de Odoo y la contraseña de la base de datos.
 
 ---
 
@@ -111,13 +123,13 @@ Cualquier cambio en `index.html` se ve recargando la pestaña; cambios en `backe
 1. Subí el repo a GitHub (puede ser privado, ver [Seguridad](#seguridad)).
 2. En Render: **New → Web Service**, conectá el repo.
 3. Build command: `pip install -r requirements.txt`. Start command: lo toma de [`Procfile`](Procfile) automáticamente (`gunicorn backend_odoo:app --bind 0.0.0.0:$PORT`); si no lo detecta, pegalo a mano en Start Command.
-4. Variables de entorno: cargá todas las de `.env.example` (`ODOO_URL`, `ODOO_DB`, `ODOO_UID`, `ODOO_TOKEN`, `SECRET_KEY`, `SESSION_LIFETIME_HORAS`, `FRONTEND_ORIGINS`, y las tres `BOOTSTRAP_ADMIN_*` — ver [Gestión de usuarios](#gestión-de-usuarios), las necesitás para poder loguearte la primera vez). `FRONTEND_ORIGINS` tiene que ser **el origen exacto** de tu sitio de GitHub Pages: solo protocolo + dominio (ej. `https://tu-usuario.github.io`), **sin** la ruta del repo ni barra final — el navegador manda el header `Origin` sin la ruta, así que si dejás la ruta puesta el CORS no va a matchear y el sitio va a quedar bloqueado. (La sabrás después del paso siguiente; se puede editar y volver a desplegar).
+4. Variables de entorno: cargá todas las de `.env.example` (`ODOO_URL`, `ODOO_DB`, `ODOO_UID`, `ODOO_TOKEN`, `SECRET_KEY`, `DATABASE_URL` de Supabase, `SESSION_LIFETIME_HORAS`, `FRONTEND_ORIGINS`, y las tres `BOOTSTRAP_ADMIN_*` — ver [Gestión de usuarios](#gestión-de-usuarios), las necesitás para poder loguearte la primera vez). `FRONTEND_ORIGINS` tiene que ser **el origen exacto** de tu sitio de GitHub Pages: solo protocolo + dominio (ej. `https://tu-usuario.github.io`), **sin** la ruta del repo ni barra final — el navegador manda el header `Origin` sin la ruta, así que si dejás la ruta puesta el CORS no va a matchear y el sitio va a quedar bloqueado. (La sabrás después del paso siguiente; se puede editar y volver a desplegar).
 5. Deploy. Render te da una URL tipo `https://tu-servicio.onrender.com` — copiala, la vas a necesitar en `index.html`.
 
 **Limitaciones del plan free de Render a tener en cuenta:**
 - El servicio "duerme" tras ~15 minutos sin tráfico; el primer request después de eso tarda unos segundos en responder (arranque en frío). Normal para un uso personal.
-- El disco es **efímero**: `usuarios.db` se recrea vacía en cada redeploy del backend. Ver [Gestión de usuarios](#gestión-de-usuarios).
-- **No incluye acceso a Shell** (eso es del plan pago Starter en adelante), así que no se puede correr `scripts/crear_usuario.py` a mano ahí — el bootstrap del primer admin se resuelve con variables de entorno, no con la Shell (ver más abajo).
+- El disco es **efímero** (se pierde cualquier archivo local en cada redeploy) — pero ya no importa para los usuarios, que viven en Postgres/Supabase (persistente, ver [Configurar Supabase](#configurar-supabase-base-de-datos-persistente)). Antes de esto, la app guardaba los usuarios en un archivo SQLite en ese mismo disco efímero y se perdían en cada redeploy — es la razón por la que se migró.
+- **No incluye acceso a Shell** (eso es del plan pago Starter en adelante), así que no se puede correr `scripts/crear_usuario.py` a mano ahí — el bootstrap del primer admin se resuelve con variables de entorno, no con la Shell (ver más abajo). Como la base ahora es persistente (Supabase), también podés correr `scripts/crear_usuario.py` desde tu máquina local apuntando al mismo `DATABASE_URL` de producción.
 
 ---
 
@@ -250,7 +262,7 @@ Si tu cuenta es admin, al loguearte ves una sección **Usuarios** con:
 
 Por detrás usa los endpoints `GET/POST /api/usuarios`, `POST /api/usuarios/<user>/resetear-password` y `DELETE /api/usuarios/<user>` — todos devuelven 403 si la sesión no es admin. Un admin no puede eliminarse a sí mismo (para no quedarse afuera por accidente).
 
-Debajo del panel hay una tabla de **auditoría** (`GET /api/auditoria`, también solo admin) con las últimas 50 acciones: quién creó/eliminó un usuario o reseteó una contraseña, y cuándo. Como el resto de `usuarios.db`, se resetea en cada redeploy de Render free — sirve para auditar entre deploys, no como historial permanente.
+Debajo del panel hay una tabla de **auditoría** (`GET /api/auditoria`, también solo admin) con las últimas 50 acciones: quién creó/eliminó un usuario o reseteó una contraseña, y cuándo. Vive en Postgres (Supabase) junto con el resto de los usuarios — persistente, no se pierde en cada redeploy.
 
 ### Bootstrap: el primer admin
 
@@ -264,9 +276,9 @@ BOOTSTRAP_ADMIN_TARJETA=Alex Perez
 
 Al arrancar, el backend se fija si ya existe un usuario con ese `username`; si no existe, lo crea como admin con esa contraseña y tarjeta. Si ya existe, no hace nada — no pisa una contraseña que hayas cambiado después desde el panel. Cargalas en Render (**Environment**) y esperá el redeploy; con eso ya podés loguearte en el sitio de GitHub Pages y usar el panel **Usuarios** para todo lo demás.
 
-**Dejalas cargadas en Render permanentemente** (no las borres después del primer login): como el disco de Render free es efímero, `usuarios.db` se resetea en cada redeploy del backend — estas tres variables son justamente la red de seguridad que recrea ese admin automáticamente cada vez que hace falta, sin que tengas que hacer nada manual. Ojo con un detalle: si cambiás la contraseña de `BOOTSTRAP_ADMIN_USERNAME` desde el panel y **después** hay un redeploy, al recrearse el usuario vuelve a la contraseña que esté en `BOOTSTRAP_ADMIN_PASSWORD` en Render (no la que hayas cambiado) — si querés que el cambio sea permanente, actualizá también la variable de entorno.
+**Dejalas cargadas en Render permanentemente** de todas formas (no las borres después del primer login): con Postgres persistente ya no hace falta que "recreen" el admin en cada redeploy (antes sí, cuando el disco de Render era efímero) — pero siguen siendo una red de seguridad útil, por ejemplo si en algún momento se recrea el proyecto de Supabase desde cero. Ojo con un detalle: si cambiás la contraseña de `BOOTSTRAP_ADMIN_USERNAME` desde el panel y **después** el usuario se borra y se vuelve a crear (por ese escenario de recrear la base desde cero), vuelve a la contraseña que esté en `BOOTSTRAP_ADMIN_PASSWORD` en Render (no la que hayas cambiado) — si querés que el cambio sea permanente, actualizá también la variable de entorno.
 
-Si en algún momento corrés esto localmente o en un host con Shell disponible, [`scripts/crear_usuario.py`](scripts/crear_usuario.py) sigue siendo una alternativa por línea de comandos (desde la raíz del repo):
+[`scripts/crear_usuario.py`](scripts/crear_usuario.py) sigue siendo una alternativa por línea de comandos, corriéndolo desde tu máquina local (con `DATABASE_URL` en tu `.env` apuntando al mismo proyecto de Supabase que usa producción):
 
 ```powershell
 python scripts/crear_usuario.py <username> "<Nombre exacto de la tarjeta en Odoo>" --admin
@@ -280,13 +292,13 @@ python scripts/crear_usuario.py <username> --reset-password
 | Qué cambiaste | Qué hacer |
 |---|---|
 | `index.html` (diseño, JS, comportamiento del formulario) | Commit + push a `main`. GitHub Pages lo redespliega solo en un minuto o dos. |
-| `backend/` (endpoints, lógica de Odoo, auth, bot de Telegram) | Commit + push. Si tenés auto-deploy activado en Render, se redespliega solo; si no, disparalo a mano desde el dashboard. Recordá que esto resetea `usuarios.db` (ver arriba). |
+| `backend/` (endpoints, lógica de Odoo, auth, bot de Telegram) | Commit + push. Si tenés auto-deploy activado en Render, se redespliega solo; si no, disparalo a mano desde el dashboard. Los usuarios viven en Supabase, no en el disco de Render — un redeploy ya no los borra. |
 | `.env` / variables de entorno del backend | Se editan directo en el dashboard de Render (pestaña Environment). No requiere tocar el repo. |
 
 ### Subir cambios a GitHub (con GitHub Desktop)
 
 1. Abre GitHub Desktop, selecciona el repo `subir_horas`.
-2. Pestaña **Changes** — revisa que la lista de archivos modificados tenga sentido (y que **nunca** aparezca `.env`, `usuarios.db`, `.venv/` o `__pycache__/`; si aparecen, algo falló con el `.gitignore`, no continúes).
+2. Pestaña **Changes** — revisa que la lista de archivos modificados tenga sentido (y que **nunca** aparezca `.env`, `.venv/` o `__pycache__/`; si aparecen, algo falló con el `.gitignore`, no continúes).
 3. Escribe un resumen del cambio y clic en **Commit to main**.
 4. Clic en **Push origin** (arriba a la derecha) para subirlo a GitHub.
 
@@ -317,7 +329,7 @@ subir_horas/
 ├── backend/                # paquete con toda la lógica del backend (se despliega en Render)
 │   ├── __init__.py          # create_app(): registra rutas y el guard de autenticación
 │   ├── config.py             # variables de entorno y constantes
-│   ├── db.py                 # SQLite: usuarios, auditoría, vínculos de Telegram
+│   ├── db.py                 # Postgres (Supabase): usuarios, auditoría, vínculos de Telegram
 │   ├── auth.py                # token de sesión y bloqueo por intentos fallidos
 │   ├── odoo_client.py          # cliente JSON-RPC de Odoo + caché
 │   ├── horas.py                # días hábiles, validaciones, resumen/recordatorio
@@ -327,10 +339,11 @@ subir_horas/
 │   └── crear_usuario.py    # CLI para crear/resetear usuarios
 ├── requirements.txt       # dependencias del backend
 ├── Procfile                # start command para Render
-├── usuarios.db             # SQLite con usuarios (generado en runtime, NO se sube a git)
 ├── .venv/                 # entorno virtual local (ignorado)
 └── __pycache__/           # (ignorado)
 ```
+
+Los usuarios ya no viven en un archivo local (`usuarios.db` de versiones anteriores) sino en Postgres, en Supabase — no hay ningún archivo de datos que gitignorar ni que se pierda al redesplegar.
 
 `index.html` queda en la raíz porque GitHub Pages sirve ese nombre por convención en la raíz del sitio; `css/` y `js/` se referencian con rutas relativas (`css/style.css`, `js/app.js`), así que si en algún momento se sirve desde una subcarpeta hay que revisar esas rutas. `Procfile`/`requirements.txt` también quedan en la raíz por convención de Render/pip. `backend_odoo.py` queda como un archivo mínimo en la raíz (`from backend import create_app; app = create_app()`) para que el comando de arranque de Render (`gunicorn backend_odoo:app`) no necesite tocarse - toda la lógica real vive en el paquete `backend/`.
 
@@ -338,9 +351,9 @@ subir_horas/
 
 ## Seguridad
 
-- El `.env` contiene un token de API real con permisos de escritura sobre Odoo. **Nunca** se commitea, ni se comparte por chat/capturas de pantalla sin taparlo. Lo mismo aplica a las variables de entorno cargadas en Render.
-- Si el token llegara a exponerse accidentalmente (capturas, commit erróneo, etc.), hay que **rotarlo** en Odoo lo antes posible.
-- `usuarios.db` guarda contraseñas **hasheadas** (`werkzeug.security`), nunca en texto plano — aun así, nunca se sube a git.
+- El `.env` contiene un token de API real con permisos de escritura sobre Odoo, y la contraseña de la base de datos de Supabase (dentro de `DATABASE_URL`). **Nunca** se commitea, ni se comparte por chat/capturas de pantalla sin tapar esos valores. Lo mismo aplica a las variables de entorno cargadas en Render.
+- Si el token de Odoo llegara a exponerse accidentalmente (capturas, commit erróneo, etc.), hay que **rotarlo** en Odoo lo antes posible. Si se expone `DATABASE_URL`, rotá la contraseña de la base desde el dashboard de Supabase (**Project Settings → Database**).
+- Las contraseñas de los usuarios de la app se guardan **hasheadas** (`werkzeug.security`), nunca en texto plano, en la tabla `usuarios` de Postgres.
 - CORS en el backend está restringido a los orígenes listados en `FRONTEND_ORIGINS` (no `CORS(app)` abierto). Si en algún momento agregás otro dominio desde el que se sirva el frontend, hay que sumarlo ahí.
 - El webhook del bot de Telegram (`POST /api/telegram-webhook`) valida el header `X-Telegram-Bot-Api-Secret-Token` contra `TELEGRAM_WEBHOOK_SECRET`, y además cada chat tiene que vincularse a una cuenta con `/vincular <usuario> <contraseña>` (protegido contra fuerza bruta igual que el login web) antes de poder ver horas o cargarlas — sin vincular, el bot solo responde pidiendo que te vincules. A diferencia del esquema anterior (un único `TELEGRAM_CHAT_ID` fijo, que ignoraba en silencio cualquier otro chat), el bot ahora es descubrible por cualquiera que encuentre su username, así que la única barrera es la contraseña de cada cuenta — no hace falta el username del bot para ser privado, hace falta la contraseña.
 - El login se bloquea 5 minutos para un usuario tras 5 intentos fallidos seguidos (mitiga fuerza bruta básica). El contador vive en memoria del proceso — se resetea en cada redeploy, y solo funciona porque el `Procfile` corre un único worker de gunicorn (si en algún momento se agregan más workers, este esquema necesitaría un store compartido tipo Redis).
@@ -358,8 +371,9 @@ Por si en unos meses hay que recordar el "por qué":
 - **`ODOO_UID` fijo en vez de `authenticate()`**: se usa un UID ya resuelto (patrón heredado de un proyecto interno similar), evitando una llamada extra de autenticación en cada request.
 - **Empleado resuelto por tarea, no por sesión**: inicialmente se intentó resolver el campo Empleado a partir del usuario autenticado en la API. Es incorrecto — Odoo lo determina según quién está asignado a la subtarea específica (`user_ids` de `project.task`), independientemente de qué credencial hizo la llamada API.
 - **Filtro por tarjeta padre (`parent_id.name`) al buscar subtareas**: nombres de subtareas como "Carga de Horas" se repiten en las tarjetas de distintas personas dentro del mismo proyecto. Sin este filtro, la búsqueda podía devolver la subtarea de otra persona y cargar las horas en el lugar equivocado.
-- **Login propio en vez de credenciales de Odoo**: cada usuario de la app tiene su cuenta (usuario/contraseña + tarjeta asignada) en `usuarios.db`, separada de cualquier login de Odoo. Así no hace falta darle a cada persona un usuario de Odoo solo para cargar horas.
-- **Backend y frontend separados (Render + GitHub Pages) en vez de un solo proceso**: GitHub Pages no puede correr Flask; se necesitaba un servicio aparte para la lógica con estado (usuarios, SQLite) y el secreto de Odoo. Esto obligó a que el login pase de páginas server-rendered a una API JSON pura, con CORS restringido por origen.
+- **Login propio en vez de credenciales de Odoo**: cada usuario de la app tiene su cuenta (usuario/contraseña + tarjeta asignada) en Postgres, separada de cualquier login de Odoo. Así no hace falta darle a cada persona un usuario de Odoo solo para cargar horas.
+- **Backend y frontend separados (Render + GitHub Pages) en vez de un solo proceso**: GitHub Pages no puede correr Flask; se necesitaba un servicio aparte para la lógica con estado (usuarios, base de datos) y el secreto de Odoo. Esto obligó a que el login pase de páginas server-rendered a una API JSON pura, con CORS restringido por origen.
+- **Postgres en Supabase en vez de SQLite local**: la primera versión guardaba los usuarios en un archivo SQLite en el disco del propio backend. Funcionaba, hasta que un redeploy de Render (disco efímero en el plan free) borró esa base y con ella una cuenta real de un compañero — de ahí la migración a una base gestionada con almacenamiento persistente de verdad.
 - **Token en `localStorage` en vez de cookie de sesión**: el primer intento usó la cookie de sesión de Flask con `SameSite=None; Secure`. Funcionaba en pruebas con curl y en Chrome de escritorio, pero fallaba silenciosamente en Samsung Internet (y falla igual en Safari/Brave) porque esos navegadores bloquean cookies cross-site por política propia, sin importar los atributos de la cookie. Se cambió a un token firmado (`itsdangerous`) devuelto en el JSON del login, guardado en `localStorage` y mandado como header `Authorization: Bearer` — no depende de ninguna política de cookies.
 - **Sin app de escritorio**: la versión anterior se distribuía como `.exe` (pywebview + PyInstaller). Se descartó en favor de un sitio web accesible desde cualquier navegador, sin instalar nada.
 
@@ -383,4 +397,7 @@ Correr `GET /api/campos?modelo=<modelo>&q=<palabra>` (como admin) para confirmar
 El token puede haber expirado (dura `SESSION_LIFETIME_HORAS`, default 8) — volvé a loguearte. Si pasa inmediatamente después de loguearte, revisá en las herramientas de desarrollador (Network) que el pedido a `/api/whoami` esté mandando el header `Authorization: Bearer ...` — si no lo manda, puede ser que `localStorage` esté deshabilitado o bloqueado (modo incógnito estricto, alguna extensión).
 
 **No puedo loguearme después de un redeploy del backend**
-Esperado en el plan free de Render: `usuarios.db` se resetea en cada redeploy. Si tenés `BOOTSTRAP_ADMIN_*` cargadas en Render, ese admin se recrea solo — esperá el redeploy y reintentá. Si no las tenés, corré `scripts/crear_usuario.py` (ver [Gestión de usuarios](#gestión-de-usuarios)).
+Con Postgres en Supabase esto ya no debería pasar (los usuarios persisten entre redeploys). Si pasa: revisá que `DATABASE_URL` en Render sea exactamente el mismo que venías usando (un typo o apuntar a otro proyecto de Supabase por error crea/usa una base vacía). Si además tenés `BOOTSTRAP_ADMIN_*` cargadas, al menos ese admin se recrea solo — esperá el redeploy y reintentá con esas credenciales.
+
+**`OperationalError` / `could not connect to server` al arrancar el backend**
+`DATABASE_URL` mal configurada, o usando la conexión **directa** de Supabase en vez de la del **Transaction pooler** (puerto 6543) — la directa requiere IPv6 de salida, que Render no soporta. Ver [Configurar Supabase](#configurar-supabase-base-de-datos-persistente).

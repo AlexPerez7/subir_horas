@@ -11,8 +11,8 @@ import sys
 from dotenv import load_dotenv
 
 # Raíz del repo (padre de este paquete backend/) - NO la carpeta backend/
-# misma. usuarios.db y el .env viven ahí, junto a Procfile/requirements.txt,
-# no dentro del paquete.
+# misma. El .env vive ahí, junto a Procfile/requirements.txt, no dentro del
+# paquete.
 _CARPETA = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 load_dotenv(os.path.join(_CARPETA, ".env"))
@@ -37,7 +37,12 @@ ODOO_UID = int(_env_obligatoria("ODOO_UID"))
 ODOO_TOKEN = _env_obligatoria("ODOO_TOKEN")
 SECRET_KEY = _env_obligatoria("SECRET_KEY")
 
-DB_PATH = os.path.join(_CARPETA, "usuarios.db")
+# Postgres de Supabase - reemplaza al usuarios.db local que usaba versiones
+# anteriores (SQLite en el disco de Render, que es efímero y se perdía en
+# cada redeploy). Usar la cadena del "Transaction pooler" de Supabase
+# (puerto 6543), no la de conexión directa - ver README, "Configurar
+# Supabase".
+DATABASE_URL = _env_obligatoria("DATABASE_URL")
 
 FRONTEND_ORIGINS = [o.strip() for o in os.environ.get("FRONTEND_ORIGINS", "").split(",") if o.strip()]
 TOKEN_LIFETIME_SEGUNDOS = int(os.environ.get("SESSION_LIFETIME_HORAS", 8)) * 3600

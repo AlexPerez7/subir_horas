@@ -227,8 +227,8 @@ def _procesar_mensaje_telegram(texto, chat_id, tarjeta):
 
 
 def _manejar_vincular(texto, chat_id):
-    """Comando /vincular <usuario> <contraseña>: valida contra usuarios.db
-    (igual que /api/login) y guarda el mapeo chat_id→username. Protegido
+    """Comando /vincular <usuario> <contraseña>: valida contra la tabla de
+    usuarios (igual que /api/login) y guarda el mapeo chat_id→username. Protegido
     contra fuerza bruta con el mismo mecanismo de bloqueo que el login web,
     en un diccionario separado keyado por chat_id."""
     restante = auth._segundos_bloqueado(_intentos_vincular_telegram, chat_id)

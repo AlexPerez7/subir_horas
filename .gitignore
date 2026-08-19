@@ -2,7 +2,6 @@
 .env
 *.env
 !.env.example
-usuarios.db
 
 # Entorno virtual
 .venv/

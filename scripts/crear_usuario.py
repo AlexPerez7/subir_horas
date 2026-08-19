@@ -1,21 +1,16 @@
 """
-CLI para crear o resetear usuarios de la app (tabla `usuarios` en
-usuarios.db, en la raíz del repo - ver backend/db.py).
+CLI para crear o resetear usuarios de la app (tabla `usuarios` en Postgres,
+ver backend/db.py) - usa las mismas funciones que la API, no SQL propio.
 
-Uso (desde la raíz del repo):
+Uso (desde la raíz del repo, con DATABASE_URL disponible en tu .env o
+variables de entorno):
     python scripts/crear_usuario.py <username> <tarjeta> [--admin]
     python scripts/crear_usuario.py <username> --reset-password
-
-En Render (plan free, disco efímero): correr esto desde la pestaña
-"Shell" del servicio ya desplegado, no en tu máquina - usuarios.db
-vive en el disco del servicio, no en tu computadora. Hay que volver
-a correrlo después de cada redeploy del backend.
 """
 
 import argparse
 import getpass
 import os
-import sqlite3
 import sys
 
 from werkzeug.security import generate_password_hash
@@ -23,7 +18,7 @@ from werkzeug.security import generate_password_hash
 # El script vive en scripts/, pero el paquete backend/ está en la raíz del
 # repo (un nivel arriba) - hay que agregarla a sys.path para poder importar.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from backend.config import DB_PATH
+from backend import db
 
 
 def pedir_password():
@@ -48,34 +43,25 @@ def main():
     args = parser.parse_args()
 
     username = args.username.strip().lower()
-    con = sqlite3.connect(DB_PATH)
+
+    db._inicializar_db()  # por si se corre contra un Postgres recién creado, sin tablas todavía
 
     if args.reset_password:
         password = pedir_password()
-        cur = con.execute(
-            "UPDATE usuarios SET password_hash = ? WHERE username = ?",
-            (generate_password_hash(password), username),
-        )
-        con.commit()
-        if cur.rowcount:
+        if db.obtener_usuario(username):
+            db.actualizar_password(username, generate_password_hash(password))
             print(f"Contraseña actualizada para '{username}'.")
         else:
             print(f"No existe el usuario '{username}'.")
     else:
         if not args.tarjeta:
             parser.error("falta <tarjeta> para crear un usuario nuevo")
-        password = pedir_password()
-        try:
-            con.execute(
-                "INSERT INTO usuarios (username, password_hash, tarjeta, es_admin) VALUES (?, ?, ?, ?)",
-                (username, generate_password_hash(password), args.tarjeta, int(args.admin)),
-            )
-            con.commit()
-            print(f"Usuario '{username}' creado (tarjeta: '{args.tarjeta}', admin: {args.admin}).")
-        except sqlite3.IntegrityError:
+        if db.obtener_usuario(username):
             print(f"Ya existe un usuario '{username}'. Usa --reset-password para cambiarle la contraseña.")
-
-    con.close()
+        else:
+            password = pedir_password()
+            db.crear_usuario(username, generate_password_hash(password), args.tarjeta, es_admin=args.admin)
+            print(f"Usuario '{username}' creado (tarjeta: '{args.tarjeta}', admin: {args.admin}).")
 
 
 if __name__ == "__main__":

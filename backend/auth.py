@@ -45,11 +45,13 @@ def requiere_admin():
 
 
 # Bloqueo simple tras varios intentos fallidos, en memoria del proceso (no
-# en SQLite): alcanza porque el Procfile corre un único worker de gunicorn,
-# así que no hace falta coordinar estado entre procesos. Se resetea en cada
-# redeploy, igual que usuarios.db. Cada feature que lo usa (login web, bot
-# de Telegram) tiene su propio diccionario y pasa su propia clave (username
-# o chat_id) - estas funciones son genéricas sobre esos dos parámetros.
+# en la base de datos): alcanza porque el Procfile corre un único worker de
+# gunicorn, así que no hace falta coordinar estado entre procesos. Este
+# contador sí se resetea en cada redeploy (a diferencia de los usuarios,
+# que viven en Postgres) - no tiene mayor impacto, vuelve a arrancar en
+# cero. Cada feature que lo usa (login web, bot de Telegram) tiene su
+# propio diccionario y pasa su propia clave (username o chat_id) - estas
+# funciones son genéricas sobre esos dos parámetros.
 INTENTOS_MAXIMOS = 5
 BLOQUEO_SEGUNDOS = 300
 
