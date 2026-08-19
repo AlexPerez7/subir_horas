@@ -249,10 +249,41 @@ async function cargarResumen(){
     document.getElementById('resumenSemana').textContent = data.semana.toFixed(1) + 'h';
     document.getElementById('resumenMes').textContent = data.mes.toFixed(1) + 'h';
     renderGraficoSubtareas(data.por_subtarea || []);
+    renderMetaSemanal(data.semana);
   } catch(e){
     document.getElementById('resumenSemana').textContent = '—';
     document.getElementById('resumenMes').textContent = '—';
   }
+}
+
+// Meta semanal de horas: puramente local (localStorage) - no hay concepto
+// de objetivo en Odoo, así que cada quien la fija a su gusto en su propio
+// navegador. Default 40h si nunca se configuró.
+const META_SEMANAL_KEY = 'registro_horas_meta_semanal';
+
+function metaSemanalActual(){
+  const v = parseFloat(localStorage.getItem(META_SEMANAL_KEY));
+  return (v && v > 0) ? v : 40;
+}
+
+function renderMetaSemanal(horasSemana){
+  const meta = metaSemanalActual();
+  const pct = Math.max(0, Math.min(100, (horasSemana / meta) * 100));
+  const fill = document.getElementById('metaFill');
+  fill.style.width = pct.toFixed(0) + '%';
+  fill.classList.toggle('completa', horasSemana >= meta);
+  document.getElementById('metaSemanalValor').textContent = horasSemana.toFixed(1) + ' / ' + meta + 'h';
+}
+
+async function editarMetaSemanal(){
+  const nueva = await pedirTexto('Horas objetivo por semana:', {
+    titulo: 'Meta semanal', valorInicial: String(metaSemanalActual()), tipo: 'number', textoAceptar: 'Guardar'
+  });
+  if(nueva === null) return;
+  const n = parseFloat(nueva);
+  if(!n || n <= 0) return;
+  localStorage.setItem(META_SEMANAL_KEY, String(n));
+  cargarResumen();
 }
 
 function renderGraficoSubtareas(porSubtarea){
