@@ -258,28 +258,49 @@ async function cargarResumen(){
 
 // Meta semanal de horas: puramente local (localStorage) - no hay concepto
 // de objetivo en Odoo, así que cada quien la fija a su gusto en su propio
-// navegador. Default 40h si nunca se configuró.
+// navegador. Opcional: sin meta configurada no se inventa un default (no
+// todos tienen una meta de horas), se muestra un estado vacío invitando a
+// configurarla si se quiere.
 const META_SEMANAL_KEY = 'registro_horas_meta_semanal';
 
 function metaSemanalActual(){
-  const v = parseFloat(localStorage.getItem(META_SEMANAL_KEY));
-  return (v && v > 0) ? v : 40;
+  const guardado = localStorage.getItem(META_SEMANAL_KEY);
+  if(guardado === null) return null;
+  const v = parseFloat(guardado);
+  return (v && v > 0) ? v : null;
 }
 
 function renderMetaSemanal(horasSemana){
   const meta = metaSemanalActual();
-  const pct = Math.max(0, Math.min(100, (horasSemana / meta) * 100));
+  const cont = document.getElementById('metaSemanal');
   const fill = document.getElementById('metaFill');
+  const valorBtn = document.getElementById('metaSemanalValor');
+
+  if(meta === null){
+    cont.classList.add('sin-meta');
+    fill.style.width = '0%';
+    fill.classList.remove('completa');
+    valorBtn.textContent = 'Configurar meta';
+    return;
+  }
+  cont.classList.remove('sin-meta');
+  const pct = Math.max(0, Math.min(100, (horasSemana / meta) * 100));
   fill.style.width = pct.toFixed(0) + '%';
   fill.classList.toggle('completa', horasSemana >= meta);
-  document.getElementById('metaSemanalValor').textContent = horasSemana.toFixed(1) + ' / ' + meta + 'h';
+  valorBtn.textContent = horasSemana.toFixed(1) + ' / ' + meta + 'h';
 }
 
 async function editarMetaSemanal(){
-  const nueva = await pedirTexto('Horas objetivo por semana:', {
-    titulo: 'Meta semanal', valorInicial: String(metaSemanalActual()), tipo: 'number', textoAceptar: 'Guardar'
+  const actual = metaSemanalActual();
+  const nueva = await pedirTexto('Horas objetivo por semana (dejalo vacío para quitar la meta):', {
+    titulo: 'Meta semanal', valorInicial: actual !== null ? String(actual) : '', tipo: 'number', textoAceptar: 'Guardar'
   });
   if(nueva === null) return;
+  if(nueva.trim() === ''){
+    localStorage.removeItem(META_SEMANAL_KEY);
+    cargarResumen();
+    return;
+  }
   const n = parseFloat(nueva);
   if(!n || n <= 0) return;
   localStorage.setItem(META_SEMANAL_KEY, String(n));

@@ -71,6 +71,10 @@ header .eyebrow{ font-family:var(--mono); font-size:11px; color:var(--accent); t
 .meta-track{ background:var(--surface-2); border-radius:5px; height:12px; overflow:hidden; }
 .meta-fill{ background:var(--accent); height:100%; border-radius:5px; transition:width .3s ease; }
 .meta-fill.completa{ background:var(--ok); }
+/* Sin meta configurada (default: no todos quieren una) - track apagado y
+   con borde punteado en vez de una barra llena a un objetivo inventado. */
+.meta-semanal.sin-meta .meta-track{ opacity:.4; border:1px dashed var(--border); }
+.meta-semanal.sin-meta .meta-header span:first-child{ color:var(--text-dim); }
 
 .grid{ display:grid; grid-template-columns: 380px 1fr; gap:20px; align-items:start; }
 @media (max-width: 820px){ .grid{ grid-template-columns: 1fr; } }
