@@ -79,6 +79,37 @@ def timesheet_recientes():
     return jsonify({"lineas": lineas, "total_horas": total_horas})
 
 
+@bp.route("/api/timesheet/ultimo", methods=["GET"])
+def timesheet_ultimo():
+    """
+    Última línea cargada (cualquier subtarea) de la tarjeta, para el botón
+    "Repetir último registro" del formulario - precarga subtarea/horas/
+    descripción sin tener que volver a elegir todo a mano.
+    """
+    tarjeta = horas.tarjeta_de_la_request(request.args)
+    task_ids = odoo_client.subtareas_ids_de_tarjeta(tarjeta)
+    if not task_ids:
+        return jsonify({"ultimo": None})
+
+    lineas = odoo_client.odoo_execute_kw(
+        "account.analytic.line", "search_read",
+        [[["task_id", "in", task_ids]]],
+        {"fields": ["date", "name", "unit_amount", "task_id"],
+         "order": "date desc, id desc", "limit": 1},
+    )
+    if not lineas:
+        return jsonify({"ultimo": None})
+
+    linea = lineas[0]
+    tarea = odoo_client.odoo_execute_kw("project.task", "read", [[linea["task_id"][0]]], {"fields": ["name"]})[0]
+    return jsonify({"ultimo": {
+        "subtarea": tarea["name"],
+        "horas": linea["unit_amount"],
+        "detalle": linea["name"],
+        "fecha": linea["date"],
+    }})
+
+
 @bp.route("/api/timesheet/dia", methods=["GET"])
 def timesheet_dia():
     """

@@ -594,6 +594,38 @@ function usarDescripcion(btn){
   document.getElementById('detalle').value = btn.title;
 }
 
+// Prellena subtarea/horas/descripción con la última línea cargada en
+// cualquier subtarea de la tarjeta (no solo la seleccionada) - para no
+// tener que rearmar a mano un registro que se repite día a día. La fecha
+// del formulario se deja como está (normalmente "hoy"): la idea es repetir
+// el contenido, no la fecha vieja.
+async function repetirUltimoRegistro(btn){
+  if(btn) btn.disabled = true;
+  try{
+    const tarjeta = tarjetaActual();
+    const res = await api('/api/timesheet/ultimo?tarjeta=' + encodeURIComponent(tarjeta));
+    const data = await res.json();
+    if(!data.ultimo){
+      mostrarStatus('No hay registros previos en esta tarjeta para repetir.', 'err');
+      return;
+    }
+    const sel = document.getElementById('subtarea');
+    const existe = Array.from(sel.options).some(o => o.value === data.ultimo.subtarea);
+    if(existe && sel.value !== data.ultimo.subtarea){
+      sel.value = data.ultimo.subtarea;
+      localStorage.setItem(ultimaSubtareaKey(tarjeta), data.ultimo.subtarea);
+      cargarHistorial();
+    }
+    document.getElementById('horas').value = data.ultimo.horas;
+    document.getElementById('detalle').value = data.ultimo.detalle || '';
+    mostrarStatus('Prellenado con tu último registro (' + formatearFecha(data.ultimo.fecha) + '). Revisá la fecha y guardá.', 'ok');
+  } catch(e){
+    mostrarStatus('No se pudo conectar al backend: ' + escapeHTML(e.message), 'err');
+  } finally {
+    if(btn) btn.disabled = false;
+  }
+}
+
 async function cargarTarjetas(){
   const sel = document.getElementById('tarjeta');
   try{
