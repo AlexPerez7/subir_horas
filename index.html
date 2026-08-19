@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Registro de horas · Odoo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="favicon.ico" sizes="any">
@@ -105,6 +108,7 @@
 
   <div id="tabRegistrar" class="tab-panel" style="margin-top:20px;">
   <div class="grid">
+    <div class="col">
     <div class="card">
       <h2>Nueva entrada</h2>
 
@@ -162,7 +166,9 @@
       <button class="ghost" onclick="exportarExcel()">Exportar Excel (.xls)</button>
       <div class="status" id="status" aria-live="polite"></div>
     </div>
+    </div>
 
+    <div class="col">
     <div class="card">
       <h2>En Odoo · <span id="subtareaActual">—</span> <span class="hud" id="totalSubtarea" style="float:right"></span></h2>
       <input type="text" id="buscarHistorial" placeholder="Buscar en descripción o fecha..." oninput="onBuscarHistorial()" style="margin-bottom:8px;">
@@ -210,6 +216,7 @@
       </div>
       <div class="status" id="totalDia" aria-live="polite" style="margin-top:10px;"></div>
       <div class="status" id="statusDia" aria-live="polite" style="margin-top:6px;"></div>
+    </div>
     </div>
   </div>
 
