@@ -96,15 +96,18 @@ async function inicializar(){
   document.getElementById('appRoot').style.display = '';
   iniciarMonitoreoBackend();
 
+  const inicialesNombre = (yo.tarjeta || yo.username || '?')
+    .trim().split(/\s+/).slice(0, 2).map(p => p.charAt(0).toUpperCase()).join('');
   document.getElementById('userbox').innerHTML =
     '<button type="button" class="avatar-btn" id="avatarBtn" aria-haspopup="true" aria-expanded="false">' +
-      escapeHTML((yo.username || '?').charAt(0).toUpperCase()) +
+      '<span class="avatar-circle">' + escapeHTML(inicialesNombre) + '</span>' +
+      '<span class="avatar-name">' + escapeHTML(yo.tarjeta || yo.username) + '</span>' +
     '</button>' +
     '<div class="acc-menu" id="accMenu">' +
       '<div class="acc-who"><b>' + escapeHTML(yo.username) + '</b> · ' + escapeHTML(yo.tarjeta) + '</div>' +
       '<div class="acc-actions">' +
         '<button type="button" class="acc-item" onclick="toggleCambiarPassword(true)">Cambiar contraseña</button>' +
-        '<button type="button" class="acc-item" onclick="cerrarSesion()">Cerrar sesión</button>' +
+        '<button type="button" class="acc-item acc-item-danger" onclick="cerrarSesion()">Cerrar sesión</button>' +
       '</div>' +
     '</div>';
   wireAvatarMenu();
@@ -368,7 +371,7 @@ async function cargarFaltantesMes(){
       return;
     }
     cont.innerHTML = '<div class="status err">' + data.faltantes.length + ' día(s) sin horas cargadas este mes:</div><div class="chips" style="margin-top:8px;">' +
-      data.faltantes.map(f => `<button type="button" class="chip" onclick="irACargarFecha('${f}')">${formatearFecha(f)}</button>`).join('') + '</div>';
+      data.faltantes.map(f => `<button type="button" class="chip chip-danger" onclick="irACargarFecha('${f}')">${formatearFecha(f)}</button>`).join('') + '</div>';
   } catch(e){
     cont.innerHTML = '<p class="empty">No se pudo revisar los días del mes.</p>';
   }
@@ -638,7 +641,7 @@ function renderChipsDescripcion(lineas){
   const unicas = [...new Set(lineas.map(l => l.name).filter(Boolean))].slice(0, 5);
   if(unicas.length === 0){ cont.innerHTML = ''; return; }
   cont.innerHTML = unicas.map(desc =>
-    `<button type="button" class="chip" title="${escapeHTML(desc)}" onclick="usarDescripcion(this)">${escapeHTML(desc)}</button>`
+    `<button type="button" class="chip chip-sky" title="${escapeHTML(desc)}" onclick="usarDescripcion(this)">${escapeHTML(desc)}</button>`
   ).join('');
 }
 
@@ -1451,7 +1454,7 @@ async function revisarDiasFaltantes(){
     cont.innerHTML = '<div class="status err">' + data.faltantes.length + ' día(s) sin horas cargadas:</div><div class="chips" style="margin-top:8px;">' +
       data.faltantes.map(f => {
         const [y,m,d] = f.split('-');
-        return `<button type="button" class="chip" onclick="irACargarFecha('${f}')">${d}/${m}/${y}</button>`;
+        return `<button type="button" class="chip chip-danger" onclick="irACargarFecha('${f}')">${d}/${m}/${y}</button>`;
       }).join('') + '</div>';
   } catch(e){
     cont.innerHTML = '<div class="status err">Error revisando días.</div>';
