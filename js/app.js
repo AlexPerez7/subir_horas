@@ -707,8 +707,15 @@ async function cargarUsuarios(){
   }
 }
 
+// El backend guarda 'ts' en UTC (ver registrar_auditoria en db.py). Antes
+// se mostraba tal cual (solo cambiando 'T' por espacio) - una entrada de
+// hace un rato podía aparecer con una hora "futura" respecto al reloj
+// local, según el huso horario. Se convierte a la hora local del navegador.
 function formatearFechaHora(iso){
-  return iso.replace('T', ' ').replace('Z', '');
+  const d = new Date(iso);
+  const pad = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' +
+    pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
 }
 
 async function cargarAuditoria(){
