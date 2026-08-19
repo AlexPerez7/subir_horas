@@ -7,6 +7,37 @@ let MI_TARJETA = '';
 
 function ultimaSubtareaKey(tarjeta){ return 'registro_horas_ultima_subtarea:' + tarjeta; }
 
+// Tema claro/oscuro. El <script> inline en el <head> de index.html ya
+// setea data-theme antes del primer paint (evita flash) leyendo la misma
+// clave de localStorage; acá solo manejamos el toggle y los textos.
+const TEMA_KEY = 'horas_tema';
+
+function temaActual(){
+  return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+}
+
+function aplicarLabelsTema(){
+  const dark = temaActual() === 'dark';
+  const texto = dark ? 'Modo oscuro' : 'Modo claro';
+  document.querySelectorAll('.toggle-label').forEach(el => { el.textContent = texto; });
+  const logo = document.getElementById('sidebarLogo');
+  if(logo) logo.src = dark ? 'icons/logo/isotipo-blanco.png' : 'icons/logo/isotipo.png';
+}
+
+function alternarTema(){
+  const dark = temaActual() === 'dark';
+  if(dark){
+    document.documentElement.removeAttribute('data-theme');
+    localStorage.setItem(TEMA_KEY, 'light');
+  } else {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    localStorage.setItem(TEMA_KEY, 'dark');
+  }
+  aplicarLabelsTema();
+}
+
+aplicarLabelsTema();
+
 // Habilita "Instalar app" / "Agregar a pantalla de inicio" (PWA).
 if('serviceWorker' in navigator){
   navigator.serviceWorker.register('sw.js').catch(() => { /* no bloquea el uso normal si falla */ });
@@ -108,9 +139,14 @@ async function inicializar(){
       '<div class="acc-actions">' +
         '<button type="button" class="acc-item" onclick="toggleCambiarPassword(true)">Cambiar contraseña</button>' +
         '<button type="button" class="acc-item acc-item-danger" onclick="cerrarSesion()">Cerrar sesión</button>' +
+        '<button type="button" class="acc-item toggle-tema" onclick="alternarTema()">' +
+          '<span class="toggle-track"><span class="toggle-knob"></span></span>' +
+          '<span class="toggle-label">Modo claro</span>' +
+        '</button>' +
       '</div>' +
     '</div>';
   wireAvatarMenu();
+  aplicarLabelsTema();
 
   if(ES_ADMIN){
     document.getElementById('labelTarjeta').style.display = '';
