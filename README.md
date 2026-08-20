@@ -23,6 +23,8 @@ Consiste en un formulario web estático (publicado en **GitHub Pages**) conectad
 - [Estructura del proyecto](#estructura-del-proyecto)
 - [Seguridad](#seguridad)
 - [Decisiones técnicas](#decisiones-técnicas)
+- [Monitoreo](#monitoreo)
+- [Recuperación ante desastres](#recuperación-ante-desastres)
 - [Problemas comunes](#problemas-comunes)
 
 ---
@@ -372,7 +374,8 @@ subir_horas/
 ├── .github/
 │   └── workflows/
 │       ├── recordatorio-telegram.yml    # avisa por Telegram si falta cargar horas
-│       └── resumen-semanal-telegram.yml # resumen semanal por Telegram (todos los viernes)
+│       ├── resumen-semanal-telegram.yml # resumen semanal por Telegram (todos los viernes)
+│       └── respaldo-supabase.yml        # backup semanal de auditoria/telegram_links
 ├── deploy/
 │   └── subir-horas.service # unit de systemd para correr el backend en la VM
 ├── backend_odoo.py        # punto de entrada para gunicorn - solo crea la app
@@ -427,6 +430,34 @@ Por si en unos meses hay que recordar el "por qué":
 - **VM propia con Tailscale Funnel en vez de un PaaS (Render/Koyeb/Fly.io/Railway)**: para este proyecto, todas las alternativas de PaaS con free tier real fueron desapareciendo con el tiempo (Koyeb pasó a ser pago tras ser adquirida por Mistral AI en 2026; Fly.io y Railway nunca ofrecieron uno permanente sin tarjeta). Como ya había una VM Linux propia siempre encendida disponible, resultó más simple y sin costo correr el backend ahí como servicio systemd y exponerlo con Tailscale Funnel (túnel saliente, sin abrir puertos) en vez de pagar un host administrado.
 - **Token en `localStorage` en vez de cookie de sesión**: el primer intento usó la cookie de sesión de Flask con `SameSite=None; Secure`. Funcionaba en pruebas con curl y en Chrome de escritorio, pero fallaba silenciosamente en Samsung Internet (y falla igual en Safari/Brave) porque esos navegadores bloquean cookies cross-site por política propia, sin importar los atributos de la cookie. Se cambió a un token firmado (`itsdangerous`) devuelto en el JSON del login, guardado en `localStorage` y mandado como header `Authorization: Bearer` — no depende de ninguna política de cookies.
 - **Sin app de escritorio**: la versión anterior se distribuía como `.exe` (pywebview + PyInstaller). Se descartó en favor de un sitio web accesible desde cualquier navegador, sin instalar nada.
+
+---
+
+## Monitoreo
+
+A diferencia de un PaaS administrado, acá nadie te avisa solo si la VM se cae, el Funnel se rompe, o el servicio queda colgado — hay que ponerlo a propósito. Recomendado: [UptimeRobot](https://uptimerobot.com) (free tier alcanza de sobra), un monitor HTTP pegándole a `https://tu-maquina.tu-tailnet.ts.net/` cada 5 minutos, con alerta por Telegram o email si deja de responder. Setup en su dashboard, no requiere tocar este repo.
+
+---
+
+## Recuperación ante desastres
+
+Qué hacer si la VM se pierde por completo (falla de hardware, se borra por error, etc.). No debería pasar seguido, pero conviene tener el camino escrito de antes en vez de improvisarlo en el momento.
+
+**Lo que no se pierde:** los datos (usuarios, auditoría, vínculos de Telegram) viven en Supabase, totalmente independiente de la VM — no hay nada que restaurar ahí. Lo único que hay que rehacer es la infraestructura del backend.
+
+**Respaldo adicional de Supabase:** el workflow [`.github/workflows/respaldo-supabase.yml`](.github/workflows/respaldo-supabase.yml) exporta `auditoria` y `telegram_links` como artifact de GitHub Actions todos los lunes — una red extra además de los backups propios de Supabase. Requiere los secrets `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` cargados en GitHub (los mismos valores del `.env` de la VM). La tabla `usuarios` (tiene `password_hash`) queda afuera de ese workflow a propósito — este repo es público, y esos hashes no deberían quedar en un artifact descargable por cualquiera. Para respaldarla, corré esto en tu máquina local (con `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` en tu `.env`, no sube nada a ningún lado):
+```bash
+curl -fsS "$SUPABASE_URL/rest/v1/usuarios?select=*" \
+  -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+  -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+  -o usuarios-backup-$(date +%Y%m%d).json
+```
+
+1. Levanta una VM Ubuntu/Debian nueva (o reinstala la existente) y sigue [Desplegar el backend en tu propia VM](#desplegar-el-backend-en-tu-propia-vm) de punta a punta: clonar el repo, venv, `.env`, systemd, Tailscale.
+   - Los valores del `.env` (`ODOO_TOKEN`, `SUPABASE_SERVICE_ROLE_KEY`, etc.) hay que sacarlos de donde los tengas guardados aparte (gestor de contraseñas, el `.env` de tu máquina local si está actualizado) — no viven en ningún otro lado recuperable automáticamente. `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` siempre se pueden volver a sacar del dashboard de Supabase (**Project Settings → API**) aunque se pierdan.
+   - `SECRET_KEY` puede ser una nueva sin problema — invalida las sesiones activas (todos tienen que volver a loguearse), pero no hay ningún otro dato atado a ese valor.
+2. **Antes** de correr `tailscale up` en la VM nueva: si la VM vieja seguía registrada en tu tailnet (aparece como "offline" en el [admin console de Tailscale](https://login.tailscale.com/admin/machines)), elimínala de ahí. Si no, la VM nueva puede terminar con un nombre de máquina distinto (`asistente-vmware-1` en vez de `asistente-vmware`) y la URL del Funnel cambia sin que lo esperes.
+3. Con la URL de Funnel confirmada (la misma de antes, o una nueva), repite el corte: `API_BASE` en `js/app.js`, las URLs en `recordatorio-telegram.yml`/`resumen-semanal-telegram.yml`, y vuelve a registrar el webhook de Telegram (ver [Registrar el webhook en Telegram](#recordatorio-y-resumen-por-telegram)) — exactamente los mismos pasos que la migración original de Render a esta VM.
 
 ---
 
