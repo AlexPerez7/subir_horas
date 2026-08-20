@@ -8,7 +8,14 @@ Type=simple
 User=CAMBIAR_USUARIO
 WorkingDirectory=/ruta/a/subir_horas
 Environment=PATH=/ruta/a/subir_horas/.venv/bin
-ExecStart=/ruta/a/subir_horas/.venv/bin/gunicorn backend_odoo:app --bind 127.0.0.1:8000
+# --worker-class gthread --threads 4: un solo proceso (los diccionarios en
+# memoria de auth.py/odoo_client.py se siguen compartiendo bien - ver
+# backend/auth.py), pero con un pool de 4 threads puede atender varios
+# pedidos a la vez mientras esperan la respuesta de Odoo por red (I/O, no
+# CPU - los threads sí ayudan acá aunque el GIL sea uno solo). Sin esto,
+# el worker "sync" por default atiende un pedido a la vez y el resto se
+# encola, aunque el navegador los haya mandado en paralelo.
+ExecStart=/ruta/a/subir_horas/.venv/bin/gunicorn backend_odoo:app --bind 127.0.0.1:8000 --worker-class gthread --threads 4
 Restart=on-failure
 RestartSec=5
 

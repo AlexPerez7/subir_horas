@@ -15,6 +15,12 @@ import requests
 
 from . import config
 
+# Sesión compartida (en vez de requests.post suelto) para reusar la
+# conexión TCP/TLS a Odoo entre llamadas - una carga de página típica
+# hace varias llamadas JSON-RPC seguidas, y sin esto cada una rehace el
+# handshake completo.
+_session = requests.Session()
+
 
 def odoo_execute_kw(model, method, args, kwargs=None):
     payload = {
@@ -27,7 +33,7 @@ def odoo_execute_kw(model, method, args, kwargs=None):
         },
         "id": 1,
     }
-    resp = requests.post(config.ODOO_URL, json=payload, timeout=15)
+    resp = _session.post(config.ODOO_URL, json=payload, timeout=15)
     resp.raise_for_status()
     data = resp.json()
     if "error" in data:
