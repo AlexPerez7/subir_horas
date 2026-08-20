@@ -1,0 +1,27 @@
+name: Deploy automático a la VM
+
+# Corre en un self-hosted runner instalado en la propia VM (ver README,
+# "Deploy automático") - no en runners de GitHub, porque la VM no tiene
+# IP pública ni puerto entrante abierto. El runner se conecta hacia
+# afuera a GitHub (igual que Tailscale), así que no hace falta abrir
+# nada en el firewall de la oficina.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Actualizar código, dependencias y reiniciar el servicio
+        run: |
+          set -e
+          cd ~/subir_horas
+          git pull --ff-only
+          source .venv/bin/activate
+          pip install -q -r requirements.txt
+          sudo systemctl restart subir-horas
+          sleep 2
+          systemctl is-active --quiet subir-horas

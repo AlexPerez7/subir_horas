@@ -15,6 +15,8 @@ Consiste en un formulario web estático (publicado en **GitHub Pages**) conectad
 - [Configuración inicial](#configuración-inicial)
 - [Modo desarrollo (local)](#modo-desarrollo-local)
 - [Desplegar el backend en tu propia VM](#desplegar-el-backend-en-tu-propia-vm)
+- [Deploy automático](#deploy-automático)
+- [CI](#ci)
 - [Publicar el frontend en GitHub Pages](#publicar-el-frontend-en-github-pages)
 - [Instalar como app (PWA)](#instalar-como-app-pwa)
 - [Recordatorio y resumen por Telegram](#recordatorio-y-resumen-por-telegram)
@@ -189,8 +191,67 @@ Esto último te da una URL fija tipo `https://tu-maquina.tu-tailnet.ts.net` — 
 - Sin cold starts ni sleep: al ser una VM propia siempre encendida, el backend responde igual de rápido a cualquier hora — no hace falta ningún workflow tipo "keep-warm".
 - El disco **no es efímero** (a diferencia de un PaaS free): los datos locales sobreviven reinicios de la VM. Los usuarios de todas formas viven en Postgres/Supabase (ver [Configurar Supabase](#configurar-supabase-base-de-datos-persistente)), así que esto no cambia nada del diseño.
 - Tienes acceso `sudo` completo a la VM, así que `scripts/crear_usuario.py` se puede correr directo ahí (`sudo -u CAMBIAR_USUARIO .venv/bin/python scripts/crear_usuario.py ...`) además de desde tu máquina local — igual dejamos el bootstrap por variables de entorno (`BOOTSTRAP_ADMIN_*`, ver [Gestión de usuarios](#gestión-de-usuarios)) como la forma más simple de tener el primer admin sin loguearte a la VM.
-- Actualizar el backend tras un cambio de código es manual: `git pull && sudo systemctl restart subir-horas` en la VM (no hay auto-deploy). Ver [Flujo de actualización](#flujo-de-actualización).
+- Actualizar el backend tras un cambio de código puede ser automático (ver [Deploy automático](#deploy-automático)) o manual: `git pull && sudo systemctl restart subir-horas` en la VM. Ver [Flujo de actualización](#flujo-de-actualización).
 - Es una VM compartida con otros usos de oficina — confirma con quien la administre que está bien correr un servicio expuesto públicamente ahí antes de activar el Funnel.
+
+---
+
+## Deploy automático
+
+Por defecto, actualizar el backend es manual (`git pull && sudo systemctl restart subir-horas` en la VM, ver [Flujo de actualización](#flujo-de-actualización)). El workflow [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) lo automatiza: cada push a `main` hace ese mismo `git pull` + reinstalar dependencias + reiniciar el servicio, sin que tengas que entrar a la VM.
+
+Como la VM no tiene IP pública ni puerto entrante abierto (solo Tailscale Funnel, saliente), no puede usar un runner normal de GitHub — en cambio corre en un **runner propio** instalado en la misma VM, que se conecta hacia afuera a GitHub (igual que Tailscale) para pedir trabajo, sin necesidad de abrir nada en el firewall de la oficina.
+
+**1. Instalar el runner en la VM**
+
+En GitHub: **Settings → Actions → Runners → New self-hosted runner**, elige **Linux**, y copia/pega en la VM los comandos exactos que te muestra ahí (cambian de versión con el tiempo, por eso no se listan acá tal cual). En general es:
+
+```bash
+mkdir ~/actions-runner && cd ~/actions-runner
+curl -o actions-runner.tar.gz -L <URL que te da GitHub>
+tar xzf actions-runner.tar.gz
+./config.sh --url https://github.com/<tu-usuario>/subir_horas --token <TOKEN que te da GitHub>
+```
+
+En el paso `./config.sh`, cuando pregunte por labels/grupo, los valores por default están bien (el workflow usa `runs-on: self-hosted`, sin label extra).
+
+**2. Correrlo como servicio** (para que sobreviva reinicios de la VM, igual que `subir-horas`)
+
+```bash
+sudo ./svc.sh install
+sudo ./svc.sh start
+sudo ./svc.sh status   # debería decir "active (running)"
+```
+
+**3. Permitir que el runner reinicie el servicio sin pedir contraseña**
+
+El runner corre con el mismo usuario del sistema con el que lo configuraste (normalmente el mismo que usa `subir-horas`, ver `User=` en [`deploy/subir-horas.service`](deploy/subir-horas.service)). Ese usuario necesita poder correr `systemctl restart subir-horas` sin que el workflow se quede colgado esperando una contraseña de `sudo` que nadie va a tipear:
+
+```bash
+sudo visudo -f /etc/sudoers.d/subir-horas-deploy
+```
+
+Agrega esta línea (cambia `administrator` por el usuario real que corre el runner):
+
+```
+administrator ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart subir-horas
+```
+
+Guarda y sal (`visudo` valida la sintaxis solo; si hay un error de tipeo, avisa y no guarda — evita dejar `sudoers` roto). Esta regla es **acotada a un solo comando**, no da `sudo` general al usuario del runner.
+
+**4. Probar**
+
+Commitea y pushea cualquier cambio a `main` (o **Actions → Deploy automático a la VM → Run workflow**). Debería aparecer una corrida usando tu runner (lo identifica por nombre en vez de "GitHub-hosted"), y terminar en verde. Si falla, revisa los logs del job — suele ser el sudoers mal cargado o una ruta distinta a `~/subir_horas`.
+
+**Nota de seguridad:** un runner self-hosted en un repo público es sensible en general (cualquiera podría, en teoría, mandar un PR que corra código arbitrario en tu runner) — pero acá el trigger es solo `push` a `main` (nadie más que tú puede pushear ahí) y `workflow_dispatch`, no `pull_request`, así que un tercero no puede disparar una corrida.
+
+---
+
+## CI
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) corre en cada push y pull request (en runners normales de GitHub, no en el self-hosted): compila todos los `.py` de `backend/`, `scripts/` y `backend_odoo.py` (`python -m py_compile`, solo chequea sintaxis, no importa nada — así no necesita ninguna variable de entorno) y valida la sintaxis de `js/app.js` (`node --check`). Atrapa errores tontos (typos, paréntesis sin cerrar) antes de que un push dispare el deploy automático a la VM.
+
+No reemplaza tests reales (no hay suite de tests para la lógica de negocio en `backend/horas.py` todavía) — es solo una red mínima de sintaxis.
 
 ---
 
@@ -343,7 +404,7 @@ python scripts/crear_usuario.py <username> --reset-password
 | Qué cambiaste | Qué hacer |
 |---|---|
 | `index.html` (diseño, JS, comportamiento del formulario) | Commit + push a `main`. GitHub Pages lo redespliega solo en un minuto o dos. |
-| `backend/` (endpoints, lógica de Odoo, auth, bot de Telegram) | Commit + push, y en la VM: `git pull && sudo systemctl restart subir-horas`. No hay auto-deploy — es manual. Los usuarios viven en Supabase, no en el disco de la VM, así que un reinicio del servicio no los borra. |
+| `backend/` (endpoints, lógica de Odoo, auth, bot de Telegram) | Commit + push a `main`: si configuraste el [runner self-hosted](#deploy-automático), se actualiza y reinicia solo. Si no, hacerlo a mano en la VM: `git pull && sudo systemctl restart subir-horas`. Los usuarios viven en Supabase, no en el disco de la VM, así que un reinicio del servicio no los borra. |
 | `.env` / variables de entorno del backend | Se editan directo en la VM (`nano .env`) y después `sudo systemctl restart subir-horas`. No requiere tocar el repo. |
 
 ### Subir cambios a GitHub (con GitHub Desktop)
@@ -375,7 +436,9 @@ subir_horas/
 │   └── workflows/
 │       ├── recordatorio-telegram.yml    # avisa por Telegram si falta cargar horas
 │       ├── resumen-semanal-telegram.yml # resumen semanal por Telegram (todos los viernes)
-│       └── respaldo-supabase.yml        # backup semanal de auditoria/telegram_links
+│       ├── respaldo-supabase.yml        # backup semanal de auditoria/telegram_links
+│       ├── ci.yml                       # chequeo de sintaxis Python/JS en cada push/PR
+│       └── deploy.yml                   # deploy automático a la VM (runner self-hosted)
 ├── deploy/
 │   └── subir-horas.service # unit de systemd para correr el backend en la VM
 ├── backend_odoo.py        # punto de entrada para gunicorn - solo crea la app

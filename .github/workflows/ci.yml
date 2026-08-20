@@ -1,0 +1,36 @@
+name: CI
+
+# Chequeo liviano en cada push/PR: sintaxis Python válida (py_compile,
+# no importa nada asi que no necesita ninguno de los secrets/env vars
+# obligatorias de backend/config.py) y sintaxis JS válida (node --check).
+# No reemplaza tests, pero atrapa errores tontos (typos, paréntesis sin
+# cerrar) antes de que lleguen a la VM via el deploy automático.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  sintaxis-python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compilar todos los .py (chequeo de sintaxis)
+        run: |
+          find backend scripts -name "*.py" -print0 | xargs -0 python -m py_compile
+          python -m py_compile backend_odoo.py
+
+  sintaxis-js:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Chequear sintaxis de js/app.js
+        run: node --check js/app.js
