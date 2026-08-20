@@ -1,0 +1,16 @@
+[Unit]
+Description=Registro de Horas - backend Flask (gunicorn)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=CAMBIAR_USUARIO
+WorkingDirectory=/ruta/a/subir_horas
+Environment=PATH=/ruta/a/subir_horas/.venv/bin
+ExecStart=/ruta/a/subir_horas/.venv/bin/gunicorn backend_odoo:app --bind 127.0.0.1:8000
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
