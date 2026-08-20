@@ -36,7 +36,7 @@ jobs:
         id: consulta
         if: steps.hora.outputs.correcta == 'true' || github.event_name == 'workflow_dispatch'
         run: |
-          RESPUESTA=$(curl -fsS -H "X-Cron-Secret: ${{ secrets.CRON_SECRET }}" https://subir-horas.onrender.com/api/recordatorio-cron)
+          RESPUESTA=$(curl -fsS -H "X-Cron-Secret: ${{ secrets.CRON_SECRET }}" https://asistente-vmware.tail8f4e31.ts.net/api/recordatorio-cron)
           echo "$RESPUESTA"
           echo "pendiente=$(echo "$RESPUESTA" | jq -r '.pendiente')" >> "$GITHUB_OUTPUT"
           echo "fecha=$(echo "$RESPUESTA" | jq -r '.fecha')" >> "$GITHUB_OUTPUT"

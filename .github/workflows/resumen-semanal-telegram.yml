@@ -34,7 +34,7 @@ jobs:
         id: consulta
         if: steps.hora.outputs.correcta == 'true' || github.event_name == 'workflow_dispatch'
         run: |
-          curl -fsS -H "X-Cron-Secret: ${{ secrets.CRON_SECRET }}" https://subir-horas.onrender.com/api/resumen-semanal-cron > resumen.json
+          curl -fsS -H "X-Cron-Secret: ${{ secrets.CRON_SECRET }}" https://asistente-vmware.tail8f4e31.ts.net/api/resumen-semanal-cron > resumen.json
           cat resumen.json
 
       - name: Armar y enviar mensaje por Telegram
