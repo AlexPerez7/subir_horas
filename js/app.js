@@ -101,13 +101,13 @@ async function inicializar(){
   try{
     res = await api('/api/whoami');
   } catch(e){
-    // Backend caído o escalado a cero (Koyeb free): mostramos el login
-    // igual, con el motivo, en vez de dejar la página en blanco.
+    // Backend caído o dormido (Render free): mostramos el login igual,
+    // con el motivo, en vez de dejar la página en blanco.
     document.getElementById('appRoot').style.display = 'none';
     document.getElementById('loginBox').style.display = 'block';
     const statusEl = document.getElementById('loginStatus');
     statusEl.className = 'status err';
-    statusEl.textContent = 'No se pudo conectar al backend (' + e.message + '). Puede estar "despertando" (Koyeb free) - probá reintentar en unos segundos.';
+    statusEl.textContent = 'No se pudo conectar al backend (' + e.message + '). Puede estar "despertando" (Render free) - probá reintentar en unos segundos.';
     return;
   }
   if(res.status === 401){
@@ -237,7 +237,7 @@ async function verificarBackend(){
   clearTimeout(_timeoutDespertando);
   _setEstadoBackend('estado-conectando', 'Conectando...');
   _timeoutDespertando = setTimeout(() => {
-    _setEstadoBackend('estado-conectando', 'Despertando servidor...', 'El backend gratuito (Koyeb) escala a cero tras ~1h sin uso y puede tardar hasta un minuto en responder.');
+    _setEstadoBackend('estado-conectando', 'Despertando servidor...', 'El backend gratuito (Render) duerme tras 15 min sin uso y puede tardar hasta un minuto en responder.');
   }, 3000);
 
   try{

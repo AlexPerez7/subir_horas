@@ -77,8 +77,8 @@ def registrar_auditoria(actor, accion, detalle=""):
     """
     Deja rastro de una acción de administración (crear/eliminar
     usuario, resetear contraseña). Registro permanente (Postgres en
-    Supabase) - a diferencia de la época de SQLite en el disco del
-    backend, ya no se pierde en cada redeploy.
+    Supabase) - a diferencia de la época de SQLite en Render, ya no se
+    pierde en cada redeploy.
     """
     with _cursor() as cur:
         cur.execute(

@@ -2,7 +2,7 @@
 Punto de entrada para gunicorn (ver Procfile: `gunicorn backend_odoo:app`).
 La app real vive en el paquete backend/ (ver backend/__init__.py para la
 documentación completa) - este archivo solo la crea y la expone como `app`
-para no tener que tocar el Procfile ni el comando de arranque en Koyeb.
+para no tener que tocar el Procfile ni el comando de arranque en Render.
 """
 
 from backend import create_app
