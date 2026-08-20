@@ -1,20 +1,21 @@
-name: Mantener despierto el backend de Render
+name: Mantener despierto el backend de Koyeb
 
-# Render (plan free) duerme el servicio tras ~15 min sin trafico, y el
-# primer pedido despues de eso tarda 30-50s en responder. Este job le
-# hace un ping liviano cada 12 minutos durante horario laboral
-# aproximado (para no gastar de mas los minutos gratis de Actions en
-# un repo privado) para que nunca llegue a dormirse mientras lo usas.
+# Koyeb (plan free) escala el servicio a cero tras ~1h sin trafico, y el
+# primer pedido despues de eso tarda unos segundos en responder mientras
+# levanta de nuevo la instancia. Este job le hace un ping liviano cada 45
+# minutos durante horario laboral aproximado (para no gastar de mas los
+# minutos gratis de Actions en un repo privado) para que nunca llegue a
+# escalar a cero mientras lo usas.
 #
 # Horario: 11:00-23:59 UTC, lunes a viernes. Ajustalo si no coincide
 # con tu horario real - Chile anda en UTC-3 o UTC-4 segun horario de
 # verano, así que este rango cubre aprox. 7am-8pm / 8am-9pm hora local.
-# Con este esquema son ~1400 minutos/mes, por debajo de los 2000
-# gratis/mes que da GitHub en repos privados.
+# Muy por debajo de los 2000 minutos/mes gratis que da GitHub en repos
+# privados.
 
 on:
   schedule:
-    - cron: "*/12 11-23 * * 1-5"
+    - cron: "*/45 11-23 * * 1-5"
   workflow_dispatch: {}
 
 jobs:

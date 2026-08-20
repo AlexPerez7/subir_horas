@@ -2,7 +2,7 @@
 
 Herramienta personal para registrar horas de trabajo directo en Odoo (proyecto `GER_Producción Varios NF`), sin pasar por el flujo manual de anotar en Excel y después copiar uno por uno a la tarjeta correspondiente.
 
-Consiste en un formulario web estático (publicado en **GitHub Pages**) conectado a un backend propio desplegado aparte (en **Render**), que habla con la API JSON-RPC de Odoo. Cada persona entra con su propio usuario y contraseña; el backend resuelve automáticamente qué tarjeta de Odoo le corresponde.
+Consiste en un formulario web estático (publicado en **GitHub Pages**) conectado a un backend propio desplegado aparte (en **Koyeb**), que habla con la API JSON-RPC de Odoo. Cada persona entra con su propio usuario y contraseña; el backend resuelve automáticamente qué tarjeta de Odoo le corresponde.
 
 ---
 
@@ -14,7 +14,7 @@ Consiste en un formulario web estático (publicado en **GitHub Pages**) conectad
 - [Configurar Supabase (base de datos persistente)](#configurar-supabase-base-de-datos-persistente)
 - [Configuración inicial](#configuración-inicial)
 - [Modo desarrollo (local)](#modo-desarrollo-local)
-- [Desplegar el backend en Render](#desplegar-el-backend-en-render)
+- [Desplegar el backend en Koyeb](#desplegar-el-backend-en-koyeb)
 - [Publicar el frontend en GitHub Pages](#publicar-el-frontend-en-github-pages)
 - [Instalar como app (PWA)](#instalar-como-app-pwa)
 - [Mantener el backend despierto](#mantener-el-backend-despierto)
@@ -34,7 +34,7 @@ Consiste en un formulario web estático (publicado en **GitHub Pages**) conectad
 ┌──────────────────────┐   HTTPS (fetch, JSON,   ┌──────────────────┐        JSON-RPC        ┌──────┐
 │  index.html            │   token en header)      │  backend_odoo.py │ ──────────────────────► │ Odoo │
 │  (GitHub Pages,        │ ───────────────────────► │  (Flask, en      │ ◄────────────────────── │      │
-│  estático, sin build)  │ ◄─────────────────────── │  Render)         │                          └──────┘
+│  estático, sin build)  │ ◄─────────────────────── │  Koyeb)          │                          └──────┘
 └──────────────────────┘                           └──────────────────┘
                                                               │
                                                      Postgres (Supabase)
@@ -42,10 +42,10 @@ Consiste en un formulario web estático (publicado en **GitHub Pages**) conectad
 ```
 
 - **`index.html`** — formulario standalone (HTML + CSS + JS, sin frameworks ni build step). Permite elegir tarjeta, subtarea, fecha, horas y descripción; muestra en vivo el historial real de esa subtarea en Odoo. No tiene ningún secreto embebido — solo la URL pública del backend. Se publica tal cual en GitHub Pages.
-- **`backend_odoo.py` + el paquete `backend/`** — API Flask (JSON puro) que hace de intermediaria con Odoo y gestiona el login propio de la app (usuario/contraseña, token de sesión firmado, tabla `usuarios` en Postgres). Nunca se llama a Odoo directo desde el navegador (evita exponer el token de API). Se despliega en Render, separado del frontend. Ver [Estructura del proyecto](#estructura-del-proyecto) para cómo está dividido el paquete.
+- **`backend_odoo.py` + el paquete `backend/`** — API Flask (JSON puro) que hace de intermediaria con Odoo y gestiona el login propio de la app (usuario/contraseña, token de sesión firmado, tabla `usuarios` en Postgres). Nunca se llama a Odoo directo desde el navegador (evita exponer el token de API). Se despliega en Koyeb, separado del frontend. Ver [Estructura del proyecto](#estructura-del-proyecto) para cómo está dividido el paquete.
 - **`scripts/crear_usuario.py`** — CLI para crear cuentas o resetear contraseñas. Se corre desde tu máquina local, apuntando a la misma base de Supabase que usa producción (ver [Gestión de usuarios](#gestión-de-usuarios)).
 
-Como el frontend y el backend viven en dominios distintos (`*.github.io` vs `*.onrender.com`), la comunicación es cross-origin. La autenticación **no usa cookies**: muchos navegadores (Safari, Brave, Samsung Internet, y cada vez más) bloquean por defecto las cookies "de terceros" aunque tengan `SameSite=None; Secure`, lo que rompería el login. En cambio, `/api/login` devuelve un token firmado que el frontend guarda en `localStorage` y manda como header `Authorization: Bearer <token>` en cada pedido — no depende de ninguna política de cookies del navegador. El backend restringe CORS al origen exacto del sitio de GitHub Pages.
+Como el frontend y el backend viven en dominios distintos (`*.github.io` vs `*.koyeb.app`), la comunicación es cross-origin. La autenticación **no usa cookies**: muchos navegadores (Safari, Brave, Samsung Internet, y cada vez más) bloquean por defecto las cookies "de terceros" aunque tengan `SameSite=None; Secure`, lo que rompería el login. En cambio, `/api/login` devuelve un token firmado que el frontend guarda en `localStorage` y manda como header `Authorization: Bearer <token>` en cada pedido — no depende de ninguna política de cookies del navegador. El backend restringe CORS al origen exacto del sitio de GitHub Pages.
 
 ---
 
@@ -73,17 +73,17 @@ Además de cargar/editar/eliminar horas y ver el historial en vivo:
   pip install -r requirements.txt
   ```
 - Acceso a Odoo con un usuario/token que tenga permisos de lectura/escritura sobre `project.task`, `account.analytic.line` y `hr.employee`.
-- Una cuenta de GitHub (para Pages), una cuenta de Render (para el backend) y una cuenta de Supabase (para la base de datos de usuarios) — las tres gratuitas.
+- Una cuenta de GitHub (para Pages), una cuenta de Koyeb (para el backend) y una cuenta de Supabase (para la base de datos de usuarios) — las tres gratuitas.
 
 ---
 
 ## Configurar Supabase (base de datos persistente)
 
-Los usuarios de la app (login, auditoría, vínculos de Telegram) se guardan en Postgres, en un proyecto de [Supabase](https://supabase.com) — free tier, con almacenamiento persistente de verdad (a diferencia del disco de Render, ver [Limitaciones del plan free de Render](#desplegar-el-backend-en-render)).
+Los usuarios de la app (login, auditoría, vínculos de Telegram) se guardan en Postgres, en un proyecto de [Supabase](https://supabase.com) — free tier, con almacenamiento persistente de verdad (a diferencia del disco del backend, ver [Limitaciones del plan free de Koyeb](#desplegar-el-backend-en-koyeb)).
 
 1. Creá una cuenta en [supabase.com](https://supabase.com) y un proyecto nuevo (elegí una contraseña de base de datos y guardala, la vas a necesitar).
-2. En el proyecto: **Project Settings → Database → Connection string**, pestaña **Transaction** (puerto `6543`, **no** la de conexión directa — esa requiere IPv6 de salida, que Render no soporta). Copiá la URI completa y reemplazá `[YOUR-PASSWORD]` por la contraseña que elegiste.
-3. Esa URI es tu `DATABASE_URL` — va en tu `.env` local y en las variables de entorno de Render (ver [Desplegar el backend en Render](#desplegar-el-backend-en-render)).
+2. En el proyecto: **Project Settings → Database → Connection string**, pestaña **Transaction** (puerto `6543`, **no** la de conexión directa — esa requiere IPv6 de salida, que no todos los hosts soportan de forma confiable. Usar el pooler evita el problema sin importar dónde termines desplegando). Copiá la URI completa y reemplazá `[YOUR-PASSWORD]` por la contraseña que elegiste.
+3. Esa URI es tu `DATABASE_URL` — va en tu `.env` local y en las variables de entorno de Koyeb (ver [Desplegar el backend en Koyeb](#desplegar-el-backend-en-koyeb)).
 4. No hace falta crear las tablas a mano: el backend las crea solo al arrancar (`CREATE TABLE IF NOT EXISTS`, ver [`backend/db.py`](backend/db.py)) — tanto la primera vez como si en algún momento recreás el proyecto de Supabase desde cero.
 
 ---
@@ -112,33 +112,34 @@ python -m http.server 5500
 
 Y abrir `http://127.0.0.1:5500/index.html`. En `.env` local, `FRONTEND_ORIGINS` tiene que incluir `http://127.0.0.1:5500`.
 
-En `js/app.js`, cambiá temporalmente `API_BASE` a `http://127.0.0.1:5000` mientras desarrollás (y volvé a poner la URL de Render antes de publicar).
+En `js/app.js`, cambiá temporalmente `API_BASE` a `http://127.0.0.1:5000` mientras desarrollás (y volvé a poner la URL de Koyeb antes de publicar).
 
 Cualquier cambio en `index.html` se ve recargando la pestaña; cambios en `backend_odoo.py` requieren reiniciar el script.
 
 ---
 
-## Desplegar el backend en Render
+## Desplegar el backend en Koyeb
 
 1. Subí el repo a GitHub (puede ser privado, ver [Seguridad](#seguridad)).
-2. En Render: **New → Web Service**, conectá el repo.
-3. Build command: `pip install -r requirements.txt`. Start command: lo toma de [`Procfile`](Procfile) automáticamente (`gunicorn backend_odoo:app --bind 0.0.0.0:$PORT`); si no lo detecta, pegalo a mano en Start Command.
-4. Variables de entorno: cargá todas las de `.env.example` (`ODOO_URL`, `ODOO_DB`, `ODOO_UID`, `ODOO_TOKEN`, `SECRET_KEY`, `DATABASE_URL` de Supabase, `SESSION_LIFETIME_HORAS`, `FRONTEND_ORIGINS`, y las tres `BOOTSTRAP_ADMIN_*` — ver [Gestión de usuarios](#gestión-de-usuarios), las necesitás para poder loguearte la primera vez). `FRONTEND_ORIGINS` tiene que ser **el origen exacto** de tu sitio de GitHub Pages: solo protocolo + dominio (ej. `https://tu-usuario.github.io`), **sin** la ruta del repo ni barra final — el navegador manda el header `Origin` sin la ruta, así que si dejás la ruta puesta el CORS no va a matchear y el sitio va a quedar bloqueado. (La sabrás después del paso siguiente; se puede editar y volver a desplegar).
-5. Deploy. Render te da una URL tipo `https://tu-servicio.onrender.com` — copiala, la vas a necesitar en `index.html`.
+2. En el [dashboard de Koyeb](https://app.koyeb.com): **Create Web Service**, elegí **GitHub** como fuente y conectá el repo (autorizá la app de Koyeb en GitHub si es la primera vez).
+3. Build method: **Buildpack** (no hace falta Dockerfile). Koyeb detecta Python solo a partir de `requirements.txt` y toma el comando de arranque de [`Procfile`](Procfile) automáticamente (`gunicorn backend_odoo:app --bind 0.0.0.0:$PORT`); si no lo detecta, pegalo a mano en **Run command**.
+4. Instance: la gratuita (**Free**, Nano) alcanza de sobra para uso personal.
+5. Variables de entorno (sección **Environment variables** del servicio): cargá todas las de `.env.example` (`ODOO_URL`, `ODOO_DB`, `ODOO_UID`, `ODOO_TOKEN`, `SECRET_KEY`, `DATABASE_URL` de Supabase, `SESSION_LIFETIME_HORAS`, `FRONTEND_ORIGINS`, y las tres `BOOTSTRAP_ADMIN_*` — ver [Gestión de usuarios](#gestión-de-usuarios), las necesitás para poder loguearte la primera vez). `FRONTEND_ORIGINS` tiene que ser **el origen exacto** de tu sitio de GitHub Pages: solo protocolo + dominio (ej. `https://tu-usuario.github.io`), **sin** la ruta del repo ni barra final — el navegador manda el header `Origin` sin la ruta, así que si dejás la ruta puesta el CORS no va a matchear y el sitio va a quedar bloqueado. (La sabrás después del paso siguiente; se puede editar y volver a desplegar).
+6. Deploy. Koyeb te da una URL tipo `https://tu-servicio-tuorg.koyeb.app` — copiala, la vas a necesitar en `index.html`.
 
-**Limitaciones del plan free de Render a tener en cuenta:**
-- El servicio "duerme" tras ~15 minutos sin tráfico; el primer request después de eso tarda unos segundos en responder (arranque en frío). Normal para un uso personal.
-- El disco es **efímero** (se pierde cualquier archivo local en cada redeploy) — pero ya no importa para los usuarios, que viven en Postgres/Supabase (persistente, ver [Configurar Supabase](#configurar-supabase-base-de-datos-persistente)). Antes de esto, la app guardaba los usuarios en un archivo SQLite en ese mismo disco efímero y se perdían en cada redeploy — es la razón por la que se migró.
-- **No incluye acceso a Shell** (eso es del plan pago Starter en adelante), así que no se puede correr `scripts/crear_usuario.py` a mano ahí — el bootstrap del primer admin se resuelve con variables de entorno, no con la Shell (ver más abajo). Como la base ahora es persistente (Supabase), también podés correr `scripts/crear_usuario.py` desde tu máquina local apuntando al mismo `DATABASE_URL` de producción.
+**Limitaciones del plan free de Koyeb a tener en cuenta:**
+- El servicio escala a cero tras **~1 hora** sin tráfico (más margen que los ~15 min de otros hosts free); el primer request después de eso tarda unos segundos en responder (arranque en frío) mientras levanta de nuevo la instancia. Normal para un uso personal. A diferencia de otros planes free, en el free de Koyeb este comportamiento no se puede desactivar ni ajustar.
+- El disco es efectivamente **efímero entre despliegues/reinicios de instancia** — pero no importa para los usuarios, que viven en Postgres/Supabase (persistente, ver [Configurar Supabase](#configurar-supabase-base-de-datos-persistente)).
+- El CLI de Koyeb permite `koyeb instances exec` para correr comandos puntuales en la instancia corriendo (incluido el plan free), pero como igual conviene poder loguearse por primera vez sin instalar ni configurar el CLI, el bootstrap del primer admin se resuelve con variables de entorno (ver más abajo). Como la base es persistente (Supabase), también podés correr `scripts/crear_usuario.py` desde tu máquina local apuntando al mismo `DATABASE_URL` de producción, sin tocar Koyeb para nada.
 
 ---
 
 ## Publicar el frontend en GitHub Pages
 
-1. Editá `js/app.js`: reemplazá la constante `API_BASE` (primera línea) por la URL real de tu backend en Render (con `https://`, sin barra final).
+1. Editá `js/app.js`: reemplazá la constante `API_BASE` (primera línea) por la URL real de tu backend en Koyeb (con `https://`, sin barra final).
 2. Commiteá y pusheá.
 3. En GitHub: **Settings → Pages → Build and deployment → Deploy from a branch**, elegí `main` y carpeta `/ (root)`.
-4. GitHub te da una URL tipo `https://tu-usuario.github.io/subir_horas/`. Copiala en `FRONTEND_ORIGINS` en las variables de entorno de Render (sin barra final) y volvé a desplegar el backend para que el CORS la acepte.
+4. GitHub te da una URL tipo `https://tu-usuario.github.io/subir_horas/`. Copiala en `FRONTEND_ORIGINS` en las variables de entorno de Koyeb (sin barra final) y volvé a desplegar el backend para que el CORS la acepte.
 
 > **Nota sobre cuentas Free:** GitHub Pages publica el sitio en una URL pública en internet aunque el repositorio origen sea privado — no hay control de acceso a nivel de Pages en cuentas Free/Pro (eso requiere GitHub Enterprise). Verificá en tu cuenta si Pages está habilitado para repos privados; si no, la alternativa es pasar el repo a público (el código no debería tener datos sensibles hardcodeados, pero repasalo antes). El acceso real a los datos de horas siempre queda detrás del login, así que exponer la página de login no es en sí un problema de seguridad — pero es bueno saberlo de antemano.
 
@@ -159,10 +160,10 @@ Los íconos están en `icons/` (generados una vez, no hace falta regenerarlos sa
 
 ## Mantener el backend despierto
 
-Render free duerme el servicio tras ~15 min sin tráfico (ver [limitaciones](#desplegar-el-backend-en-render)). El workflow [`.github/workflows/keep-warm.yml`](.github/workflows/keep-warm.yml) le hace un ping a `/` cada 12 minutos en horario laboral aproximado (11:00-23:59 UTC, lunes a viernes) para que nunca llegue a dormirse mientras lo estás usando — se activa solo con GitHub Actions, no requiere ninguna cuenta externa.
+Koyeb free escala a cero tras ~1 hora sin tráfico (ver [limitaciones](#desplegar-el-backend-en-koyeb)) y ese comportamiento no se puede desactivar en el plan free. El workflow [`.github/workflows/keep-warm.yml`](.github/workflows/keep-warm.yml) le hace un ping a `/` cada 45 minutos en horario laboral aproximado (11:00-23:59 UTC, lunes a viernes) para que nunca llegue a escalar a cero mientras lo estás usando — se activa solo con GitHub Actions, no requiere ninguna cuenta externa.
 
 - Si el horario no coincide con el tuyo, ajustá el rango de horas en el `cron:` del archivo (está en UTC, no en hora local).
-- Diseñado para quedar por debajo de los 2000 minutos/mes gratis que da GitHub Actions en repos privados (~1400 min/mes con este esquema) — si lo hacés correr más seguido o más horas, revisá que no te pases.
+- Diseñado para quedar muy por debajo de los 2000 minutos/mes gratis que da GitHub Actions en repos privados — si lo hacés correr más seguido o más horas, revisá que no te pases.
 - Podés dispararlo a mano desde la pestaña **Actions** del repo (`workflow_dispatch`) para probarlo sin esperar al próximo horario.
 
 ---
@@ -184,7 +185,7 @@ Igual que `SECRET_KEY`:
 ```powershell
 python -c "import secrets; print(secrets.token_hex(32))"
 ```
-Cargalo como `CRON_SECRET` en las variables de entorno de Render.
+Cargalo como `CRON_SECRET` en las variables de entorno de Koyeb.
 
 **2. Crear el bot de Telegram**
 
@@ -197,7 +198,7 @@ Cargalo como `CRON_SECRET` en las variables de entorno de Render.
 **3. Cargar los secrets en GitHub**
 
 En el repo: **Settings → Secrets and variables → Actions → New repository secret**, y agregá:
-- `CRON_SECRET` — el mismo valor que pusiste en Render.
+- `CRON_SECRET` — el mismo valor que pusiste en Koyeb.
 - `TELEGRAM_BOT_TOKEN` — el token que te dio BotFather.
 - `TELEGRAM_CHAT_ID` — el id que sacaste de `getUpdates`.
 
@@ -207,7 +208,7 @@ Pestaña **Actions → Recordatorio de horas por Telegram → Run workflow** (y 
 
 ### Bot interactivo: preguntarle cosas al bot (y cargar horas)
 
-Además de los avisos automáticos, le podés escribir directo al bot en Telegram. Esto es distinto de los workflows de arriba: en vez de un job periódico que empuja un mensaje, es un **webhook** — Telegram le pega un `POST` a tu backend en Render cada vez que le escribís (o tocás un botón), y el backend responde en el momento (`POST /api/telegram-webhook`, ver [`backend/routes/telegram_routes.py`](backend/routes/telegram_routes.py) y [`backend/telegram_bot.py`](backend/telegram_bot.py)).
+Además de los avisos automáticos, le podés escribir directo al bot en Telegram. Esto es distinto de los workflows de arriba: en vez de un job periódico que empuja un mensaje, es un **webhook** — Telegram le pega un `POST` a tu backend en Koyeb cada vez que le escribís (o tocás un botón), y el backend responde en el momento (`POST /api/telegram-webhook`, ver [`backend/routes/telegram_routes.py`](backend/routes/telegram_routes.py) y [`backend/telegram_bot.py`](backend/telegram_bot.py)).
 
 Entiende:
 - `/vincular <usuario> <contraseña>` → asocia ese chat de Telegram a tu cuenta de la app (las mismas credenciales del login web). Hace falta hacerlo una sola vez por chat antes de poder usar el resto de los comandos.
@@ -218,9 +219,9 @@ Entiende:
 
 El bot es **multiusuario**: cualquier cuenta de la app puede vincular su propio chat de Telegram con `/vincular` y usar el bot para su propia tarjeta — no hace falta ser el admin. Un chat sin vincular solo puede usar `/vincular`; para cualquier otro mensaje, el bot pide que te vincules primero. `/vincular` está protegido contra fuerza bruta igual que el login web (se bloquea 5 minutos tras 5 intentos fallidos desde el mismo chat).
 
-**1. Variables de entorno en Render**
+**1. Variables de entorno en Koyeb**
 
-Además de `CRON_SECRET`, cargá en Render (no en GitHub — estas las usa el backend, no un workflow):
+Además de `CRON_SECRET`, cargá en Koyeb (no en GitHub — estas las usa el backend, no un workflow):
 - `TELEGRAM_BOT_TOKEN` — el mismo token de BotFather.
 - `TELEGRAM_WEBHOOK_SECRET` — una cadena aleatoria nueva (generarla igual que `SECRET_KEY`). Es el mecanismo con el que el backend verifica que el `POST` realmente viene de Telegram y no de cualquiera que le pegue a la URL.
 
@@ -228,13 +229,13 @@ Además de `CRON_SECRET`, cargá en Render (no en GitHub — estas las usa el ba
 
 **2. Registrar el webhook en Telegram (una sola vez)**
 
-Con tu token real y la URL de tu backend en Render:
+Con tu token real y la URL de tu backend en Koyeb:
 ```powershell
 curl -X POST "https://api.telegram.org/bot<TOKEN>/setWebhook" `
-  -d url="https://tu-servicio.onrender.com/api/telegram-webhook" `
+  -d url="https://tu-servicio-tuorg.koyeb.app/api/telegram-webhook" `
   -d secret_token="<TELEGRAM_WEBHOOK_SECRET>"
 ```
-Debería responder `{"ok":true,"result":true,...}`. A partir de ahí, cualquier mensaje que le mandes al bot (o botón que toques) dispara el webhook automáticamente — no hace falta volver a correr esto salvo que cambies de URL de Render o quieras rotar el secreto.
+Debería responder `{"ok":true,"result":true,...}`. A partir de ahí, cualquier mensaje que le mandes al bot (o botón que toques) dispara el webhook automáticamente — no hace falta volver a correr esto salvo que cambies de URL de Koyeb o quieras rotar el secreto.
 
 **3. Registrar los comandos en Telegram (opcional, una sola vez)**
 
@@ -246,7 +247,7 @@ curl -X POST "https://api.telegram.org/bot<TOKEN>/setMyCommands" `
 
 **4. Probar**
 
-Escribile al bot `/vincular tu-usuario tu-contraseña` (las mismas credenciales del login web) y después "resumen" o "¿qué días no he subido horas?" desde Telegram. Si el backend estaba dormido (Render free), la primera respuesta puede tardar hasta un minuto en llegar (arranque en frío) — es normal.
+Escribile al bot `/vincular tu-usuario tu-contraseña` (las mismas credenciales del login web) y después "resumen" o "¿qué días no he subido horas?" desde Telegram. Si el backend había escalado a cero (Koyeb free), la primera respuesta puede tardar hasta un minuto en llegar (arranque en frío) — es normal.
 
 ---
 
@@ -266,7 +267,7 @@ Debajo del panel hay una tabla de **auditoría** (`GET /api/auditoria`, también
 
 ### Bootstrap: el primer admin
 
-El panel necesita que ya exista al menos un admin logueado. En el plan free de Render **no hay Shell** para correr comandos a mano (es una función paga desde el plan Starter), así que el primer admin se crea con tres variables de entorno:
+El panel necesita que ya exista al menos un admin logueado. Para no depender de instalar/configurar el CLI de Koyeb solo para ese primer login, el primer admin se crea con tres variables de entorno:
 
 ```
 BOOTSTRAP_ADMIN_USERNAME=tu-usuario
@@ -274,9 +275,9 @@ BOOTSTRAP_ADMIN_PASSWORD=una-contraseña-inicial
 BOOTSTRAP_ADMIN_TARJETA=Alex Perez
 ```
 
-Al arrancar, el backend se fija si ya existe un usuario con ese `username`; si no existe, lo crea como admin con esa contraseña y tarjeta. Si ya existe, no hace nada — no pisa una contraseña que hayas cambiado después desde el panel. Cargalas en Render (**Environment**) y esperá el redeploy; con eso ya podés loguearte en el sitio de GitHub Pages y usar el panel **Usuarios** para todo lo demás.
+Al arrancar, el backend se fija si ya existe un usuario con ese `username`; si no existe, lo crea como admin con esa contraseña y tarjeta. Si ya existe, no hace nada — no pisa una contraseña que hayas cambiado después desde el panel. Cargalas en Koyeb (**Environment variables**) y esperá el redeploy; con eso ya podés loguearte en el sitio de GitHub Pages y usar el panel **Usuarios** para todo lo demás.
 
-**Dejalas cargadas en Render permanentemente** de todas formas (no las borres después del primer login): con Postgres persistente ya no hace falta que "recreen" el admin en cada redeploy (antes sí, cuando el disco de Render era efímero) — pero siguen siendo una red de seguridad útil, por ejemplo si en algún momento se recrea el proyecto de Supabase desde cero. Ojo con un detalle: si cambiás la contraseña de `BOOTSTRAP_ADMIN_USERNAME` desde el panel y **después** el usuario se borra y se vuelve a crear (por ese escenario de recrear la base desde cero), vuelve a la contraseña que esté en `BOOTSTRAP_ADMIN_PASSWORD` en Render (no la que hayas cambiado) — si querés que el cambio sea permanente, actualizá también la variable de entorno.
+**Dejalas cargadas en Koyeb permanentemente** de todas formas (no las borres después del primer login): con Postgres persistente ya no hace falta que "recreen" el admin en cada redeploy — pero siguen siendo una red de seguridad útil, por ejemplo si en algún momento se recrea el proyecto de Supabase desde cero. Ojo con un detalle: si cambiás la contraseña de `BOOTSTRAP_ADMIN_USERNAME` desde el panel y **después** el usuario se borra y se vuelve a crear (por ese escenario de recrear la base desde cero), vuelve a la contraseña que esté en `BOOTSTRAP_ADMIN_PASSWORD` en Koyeb (no la que hayas cambiado) — si querés que el cambio sea permanente, actualizá también la variable de entorno.
 
 [`scripts/crear_usuario.py`](scripts/crear_usuario.py) sigue siendo una alternativa por línea de comandos, corriéndolo desde tu máquina local (con `DATABASE_URL` en tu `.env` apuntando al mismo proyecto de Supabase que usa producción):
 
@@ -292,8 +293,8 @@ python scripts/crear_usuario.py <username> --reset-password
 | Qué cambiaste | Qué hacer |
 |---|---|
 | `index.html` (diseño, JS, comportamiento del formulario) | Commit + push a `main`. GitHub Pages lo redespliega solo en un minuto o dos. |
-| `backend/` (endpoints, lógica de Odoo, auth, bot de Telegram) | Commit + push. Si tenés auto-deploy activado en Render, se redespliega solo; si no, disparalo a mano desde el dashboard. Los usuarios viven en Supabase, no en el disco de Render — un redeploy ya no los borra. |
-| `.env` / variables de entorno del backend | Se editan directo en el dashboard de Render (pestaña Environment). No requiere tocar el repo. |
+| `backend/` (endpoints, lógica de Odoo, auth, bot de Telegram) | Commit + push. Koyeb tiene auto-deploy activado por defecto al conectar el repo, así que se redespliega solo; si lo desactivaste, disparalo a mano desde el dashboard. Los usuarios viven en Supabase, no en el disco del backend — un redeploy no los borra. |
+| `.env` / variables de entorno del backend | Se editan directo en el dashboard de Koyeb (pestaña Environment variables del servicio). No requiere tocar el repo. |
 
 ### Subir cambios a GitHub (con GitHub Desktop)
 
@@ -322,11 +323,11 @@ subir_horas/
 ├── favicon.ico
 ├── .github/
 │   └── workflows/
-│       ├── keep-warm.yml                # ping periódico a Render para que no se duerma
+│       ├── keep-warm.yml                # ping periódico al backend para que no escale a cero
 │       ├── recordatorio-telegram.yml    # avisa por Telegram si falta cargar horas
 │       └── resumen-semanal-telegram.yml # resumen semanal por Telegram (todos los viernes)
 ├── backend_odoo.py        # punto de entrada para gunicorn (ver Procfile) - solo crea la app
-├── backend/                # paquete con toda la lógica del backend (se despliega en Render)
+├── backend/                # paquete con toda la lógica del backend (se despliega en Koyeb)
 │   ├── __init__.py          # create_app(): registra rutas y el guard de autenticación
 │   ├── config.py             # variables de entorno y constantes
 │   ├── db.py                 # Postgres (Supabase): usuarios, auditoría, vínculos de Telegram
@@ -338,20 +339,20 @@ subir_horas/
 ├── scripts/
 │   └── crear_usuario.py    # CLI para crear/resetear usuarios
 ├── requirements.txt       # dependencias del backend
-├── Procfile                # start command para Render
+├── Procfile                # start command para Koyeb (buildpack Python)
 ├── .venv/                 # entorno virtual local (ignorado)
 └── __pycache__/           # (ignorado)
 ```
 
 Los usuarios ya no viven en un archivo local (`usuarios.db` de versiones anteriores) sino en Postgres, en Supabase — no hay ningún archivo de datos que gitignorar ni que se pierda al redesplegar.
 
-`index.html` queda en la raíz porque GitHub Pages sirve ese nombre por convención en la raíz del sitio; `css/` y `js/` se referencian con rutas relativas (`css/style.css`, `js/app.js`), así que si en algún momento se sirve desde una subcarpeta hay que revisar esas rutas. `Procfile`/`requirements.txt` también quedan en la raíz por convención de Render/pip. `backend_odoo.py` queda como un archivo mínimo en la raíz (`from backend import create_app; app = create_app()`) para que el comando de arranque de Render (`gunicorn backend_odoo:app`) no necesite tocarse - toda la lógica real vive en el paquete `backend/`.
+`index.html` queda en la raíz porque GitHub Pages sirve ese nombre por convención en la raíz del sitio; `css/` y `js/` se referencian con rutas relativas (`css/style.css`, `js/app.js`), así que si en algún momento se sirve desde una subcarpeta hay que revisar esas rutas. `Procfile`/`requirements.txt` también quedan en la raíz por convención del buildpack de Koyeb/pip. `backend_odoo.py` queda como un archivo mínimo en la raíz (`from backend import create_app; app = create_app()`) para que el comando de arranque de Koyeb (`gunicorn backend_odoo:app`) no necesite tocarse - toda la lógica real vive en el paquete `backend/`.
 
 ---
 
 ## Seguridad
 
-- El `.env` contiene un token de API real con permisos de escritura sobre Odoo, y la contraseña de la base de datos de Supabase (dentro de `DATABASE_URL`). **Nunca** se commitea, ni se comparte por chat/capturas de pantalla sin tapar esos valores. Lo mismo aplica a las variables de entorno cargadas en Render.
+- El `.env` contiene un token de API real con permisos de escritura sobre Odoo, y la contraseña de la base de datos de Supabase (dentro de `DATABASE_URL`). **Nunca** se commitea, ni se comparte por chat/capturas de pantalla sin tapar esos valores. Lo mismo aplica a las variables de entorno cargadas en Koyeb.
 - Si el token de Odoo llegara a exponerse accidentalmente (capturas, commit erróneo, etc.), hay que **rotarlo** en Odoo lo antes posible. Si se expone `DATABASE_URL`, rotá la contraseña de la base desde el dashboard de Supabase (**Project Settings → Database**).
 - Las contraseñas de los usuarios de la app se guardan **hasheadas** (`werkzeug.security`), nunca en texto plano, en la tabla `usuarios` de Postgres.
 - CORS en el backend está restringido a los orígenes listados en `FRONTEND_ORIGINS` (no `CORS(app)` abierto). Si en algún momento agregás otro dominio desde el que se sirva el frontend, hay que sumarlo ahí.
@@ -372,8 +373,8 @@ Por si en unos meses hay que recordar el "por qué":
 - **Empleado resuelto por tarea, no por sesión**: inicialmente se intentó resolver el campo Empleado a partir del usuario autenticado en la API. Es incorrecto — Odoo lo determina según quién está asignado a la subtarea específica (`user_ids` de `project.task`), independientemente de qué credencial hizo la llamada API.
 - **Filtro por tarjeta padre (`parent_id.name`) al buscar subtareas**: nombres de subtareas como "Carga de Horas" se repiten en las tarjetas de distintas personas dentro del mismo proyecto. Sin este filtro, la búsqueda podía devolver la subtarea de otra persona y cargar las horas en el lugar equivocado.
 - **Login propio en vez de credenciales de Odoo**: cada usuario de la app tiene su cuenta (usuario/contraseña + tarjeta asignada) en Postgres, separada de cualquier login de Odoo. Así no hace falta darle a cada persona un usuario de Odoo solo para cargar horas.
-- **Backend y frontend separados (Render + GitHub Pages) en vez de un solo proceso**: GitHub Pages no puede correr Flask; se necesitaba un servicio aparte para la lógica con estado (usuarios, base de datos) y el secreto de Odoo. Esto obligó a que el login pase de páginas server-rendered a una API JSON pura, con CORS restringido por origen.
-- **Postgres en Supabase en vez de SQLite local**: la primera versión guardaba los usuarios en un archivo SQLite en el disco del propio backend. Funcionaba, hasta que un redeploy de Render (disco efímero en el plan free) borró esa base y con ella una cuenta real de un compañero — de ahí la migración a una base gestionada con almacenamiento persistente de verdad.
+- **Backend y frontend separados (Koyeb + GitHub Pages) en vez de un solo proceso**: GitHub Pages no puede correr Flask; se necesitaba un servicio aparte para la lógica con estado (usuarios, base de datos) y el secreto de Odoo. Esto obligó a que el login pase de páginas server-rendered a una API JSON pura, con CORS restringido por origen.
+- **Postgres en Supabase en vez de SQLite local**: la primera versión guardaba los usuarios en un archivo SQLite en el disco del propio backend (entonces desplegado en Render). Funcionaba, hasta que un redeploy (disco efímero en el plan free) borró esa base y con ella una cuenta real de un compañero — de ahí la migración a una base gestionada con almacenamiento persistente de verdad. El backend después se migró de Render a Koyeb, pero esta decisión (Postgres externo) es independiente del host y se mantiene igual.
 - **Token en `localStorage` en vez de cookie de sesión**: el primer intento usó la cookie de sesión de Flask con `SameSite=None; Secure`. Funcionaba en pruebas con curl y en Chrome de escritorio, pero fallaba silenciosamente en Samsung Internet (y falla igual en Safari/Brave) porque esos navegadores bloquean cookies cross-site por política propia, sin importar los atributos de la cookie. Se cambió a un token firmado (`itsdangerous`) devuelto en el JSON del login, guardado en `localStorage` y mandado como header `Authorization: Bearer` — no depende de ninguna política de cookies.
 - **Sin app de escritorio**: la versión anterior se distribuía como `.exe` (pywebview + PyInstaller). Se descartó en favor de un sitio web accesible desde cualquier navegador, sin instalar nada.
 
@@ -391,13 +392,13 @@ Revisar que `buscar_tarea_id()` esté filtrando por `parent_id.name` correctamen
 Correr `GET /api/campos?modelo=<modelo>&q=<palabra>` (como admin) para confirmar el nombre técnico real del campo en esta instancia (varios campos están personalizados vía Odoo Studio, ej. `x_studio_*`).
 
 **El navegador bloquea las llamadas al backend (error de CORS) / la página queda en negro**
-`FRONTEND_ORIGINS` en el backend no incluye el origen exacto desde el que estás sirviendo `index.html`: tiene que ser **solo protocolo + dominio** (ej. `https://tu-usuario.github.io`), sin la ruta del repo (`/subir_horas`) ni barra final — el navegador manda el header `Origin` sin la ruta, así que si la dejás puesta no matchea nunca. Revisar en Render → Environment y volver a desplegar. (Si la página queda completamente en blanco/negro sin mostrar ni el login, confirmá que estás en la versión más reciente de `js/app.js` — versiones viejas no manejaban este error y se quedaban sin mostrar nada).
+`FRONTEND_ORIGINS` en el backend no incluye el origen exacto desde el que estás sirviendo `index.html`: tiene que ser **solo protocolo + dominio** (ej. `https://tu-usuario.github.io`), sin la ruta del repo (`/subir_horas`) ni barra final — el navegador manda el header `Origin` sin la ruta, así que si la dejás puesta no matchea nunca. Revisar en Koyeb → Environment variables y volver a desplegar. (Si la página queda completamente en blanco/negro sin mostrar ni el login, confirmá que estás en la versión más reciente de `js/app.js` — versiones viejas no manejaban este error y se quedaban sin mostrar nada).
 
 **Me loguea bien pero después cada request da 401 ("no autenticado")**
 El token puede haber expirado (dura `SESSION_LIFETIME_HORAS`, default 8) — volvé a loguearte. Si pasa inmediatamente después de loguearte, revisá en las herramientas de desarrollador (Network) que el pedido a `/api/whoami` esté mandando el header `Authorization: Bearer ...` — si no lo manda, puede ser que `localStorage` esté deshabilitado o bloqueado (modo incógnito estricto, alguna extensión).
 
 **No puedo loguearme después de un redeploy del backend**
-Con Postgres en Supabase esto ya no debería pasar (los usuarios persisten entre redeploys). Si pasa: revisá que `DATABASE_URL` en Render sea exactamente el mismo que venías usando (un typo o apuntar a otro proyecto de Supabase por error crea/usa una base vacía). Si además tenés `BOOTSTRAP_ADMIN_*` cargadas, al menos ese admin se recrea solo — esperá el redeploy y reintentá con esas credenciales.
+Con Postgres en Supabase esto ya no debería pasar (los usuarios persisten entre redeploys). Si pasa: revisá que `DATABASE_URL` en Koyeb sea exactamente el mismo que venías usando (un typo o apuntar a otro proyecto de Supabase por error crea/usa una base vacía). Si además tenés `BOOTSTRAP_ADMIN_*` cargadas, al menos ese admin se recrea solo — esperá el redeploy y reintentá con esas credenciales.
 
 **`OperationalError` / `could not connect to server` al arrancar el backend**
-`DATABASE_URL` mal configurada, o usando la conexión **directa** de Supabase en vez de la del **Transaction pooler** (puerto 6543) — la directa requiere IPv6 de salida, que Render no soporta. Ver [Configurar Supabase](#configurar-supabase-base-de-datos-persistente).
+`DATABASE_URL` mal configurada, o usando la conexión **directa** de Supabase en vez de la del **Transaction pooler** (puerto 6543) — la directa requiere IPv6 de salida, que no todos los hosts soportan de forma confiable. Ver [Configurar Supabase](#configurar-supabase-base-de-datos-persistente).

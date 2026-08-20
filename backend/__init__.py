@@ -8,7 +8,7 @@ Autenticacion por token, no por cookie de sesion: el login devuelve un
 token firmado que el frontend guarda (localStorage) y manda en el
 header "Authorization: Bearer <token>" en cada pedido. Se eligio este
 esquema en vez de cookies porque frontend (GitHub Pages) y backend
-(Render) viven en dominios distintos, y varios navegadores (Safari,
+(Koyeb) viven en dominios distintos, y varios navegadores (Safari,
 Brave, Samsung Internet, y cada vez mas) bloquean por defecto las
 cookies "de terceros" aunque tengan SameSite=None; Secure - un token
 en un header no depende de ninguna politica de cookies.
