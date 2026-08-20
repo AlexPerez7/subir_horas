@@ -68,7 +68,7 @@ def borrar_usuario(username):
 
     username = username.strip().lower()
     if username == g.usuario["username"]:
-        return jsonify({"error": "no podés eliminar tu propio usuario"}), 400
+        return jsonify({"error": "no puedes eliminar tu propio usuario"}), 400
 
     if not db.eliminar_usuario(username):
         return jsonify({"error": f"no existe el usuario '{username}'"}), 404

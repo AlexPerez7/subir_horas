@@ -107,7 +107,7 @@ async function inicializar(){
     document.getElementById('loginBox').style.display = 'block';
     const statusEl = document.getElementById('loginStatus');
     statusEl.className = 'status err';
-    statusEl.textContent = 'No se pudo conectar al backend (' + e.message + '). Probá reintentar en unos segundos.';
+    statusEl.textContent = 'No se pudo conectar al backend (' + e.message + '). Prueba reintentar en unos segundos.';
     return;
   }
   if(res.status === 401){
@@ -270,12 +270,12 @@ function verificarExpiracionSesion(){
     cerrarSesion();
     const statusEl = document.getElementById('loginStatus');
     statusEl.className = 'status err';
-    statusEl.textContent = 'Tu sesión expiró. Volvé a ingresar.';
+    statusEl.textContent = 'Tu sesión expiró. Vuelve a ingresar.';
     return;
   }
   if(restanteMs <= AVISO_EXPIRACION_MS){
     banner.style.display = 'block';
-    banner.textContent = '⏰ Tu sesión expira en ' + Math.ceil(restanteMs / 60000) + ' min. Guardá lo que estés haciendo y volvé a ingresar para renovarla.';
+    banner.textContent = '⏰ Tu sesión expira en ' + Math.ceil(restanteMs / 60000) + ' min. Guarda lo que estés haciendo y vuelve a ingresar para renovarla.';
   } else {
     banner.style.display = 'none';
   }
@@ -709,7 +709,7 @@ async function repetirUltimoRegistro(btn){
     }
     document.getElementById('horas').value = data.ultimo.horas;
     document.getElementById('detalle').value = data.ultimo.detalle || '';
-    mostrarStatus('Prellenado con tu último registro (' + formatearFecha(data.ultimo.fecha) + '). Revisá la fecha y guardá.', 'ok');
+    mostrarStatus('Prellenado con tu último registro (' + formatearFecha(data.ultimo.fecha) + '). Revisa la fecha y guarda.', 'ok');
   } catch(e){
     mostrarStatus('No se pudo conectar al backend: ' + escapeHTML(e.message), 'err');
   } finally {
@@ -725,7 +725,7 @@ async function cargarTarjetas(){
     const opciones = tarjetas.map(t => `<option value="${escapeHTML(t.name)}">${escapeHTML(t.name)}</option>`).join('');
     sel.innerHTML = opciones;
     // Como admin, el desplegable trae todas las tarjetas del proyecto:
-    // preseleccionamos la última usada (si seguís logueado en el mismo
+    // preseleccionamos la última usada (si sigues logueado en el mismo
     // navegador) o si no, la propia - en vez de dejar que quede la
     // primera de la lista (que es de quien sea que Odoo devuelva primero).
     const ultimaTarjeta = localStorage.getItem(ULTIMA_TARJETA_KEY);
@@ -983,7 +983,7 @@ function filtrarHistorial(){
 
 // Buscador global: a diferencia de filtrarHistorial (que solo filtra en
 // memoria lo ya cargado de la subtarea actual), le pega al backend para
-// buscar en TODAS las subtareas de la tarjeta - útil cuando no te acordás
+// buscar en TODAS las subtareas de la tarjeta - útil cuando no te acuerdas
 // bajo cuál cargaste algo. Debounced para no disparar un pedido por tecla.
 let _debounceBusquedaGlobal = null;
 
@@ -1002,7 +1002,7 @@ async function buscarHistorialGlobal(){
   const q = document.getElementById('buscarHistorial').value.trim();
   const tbody = document.getElementById('tbodyOdoo');
   if(!q){
-    tbody.innerHTML = '<tr><td colspan="4" class="empty">Escribí algo para buscar en todas tus subtareas.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="4" class="empty">Escribe algo para buscar en todas tus subtareas.</td></tr>';
     return;
   }
   tbody.innerHTML = '<tr><td colspan="4" class="empty">Buscando...</td></tr>';
@@ -1038,7 +1038,7 @@ async function registrarEnOdoo(){
     return;
   }
   if(horas > UMBRAL_HORAS_ALTAS){
-    const seguro = await confirmarAccion('Vas a registrar ' + horas + ' horas el ' + formatearFecha(fecha) + '. ¿Es correcto? (parece un valor alto, revisá que no sea un error de tipeo)', 'Confirmar horas');
+    const seguro = await confirmarAccion('Vas a registrar ' + horas + ' horas el ' + formatearFecha(fecha) + '. ¿Es correcto? (parece un valor alto, revisa que no sea un error de tipeo)', 'Confirmar horas');
     if(!seguro) return;
   }
 
@@ -1096,7 +1096,7 @@ async function registrarEnLote(){
     return;
   }
   if(horas > UMBRAL_HORAS_ALTAS){
-    const seguro = await confirmarAccion('Vas a registrar ' + horas + ' horas en cada uno de los ' + dias.length + ' días del rango. ¿Es correcto? (parece un valor alto, revisá que no sea un error de tipeo)', 'Confirmar horas');
+    const seguro = await confirmarAccion('Vas a registrar ' + horas + ' horas en cada uno de los ' + dias.length + ' días del rango. ¿Es correcto? (parece un valor alto, revisa que no sea un error de tipeo)', 'Confirmar horas');
     if(!seguro) return;
   }
 
@@ -1169,7 +1169,7 @@ function escaparCSV(valor){
 
 function exportarCSV(){
   if(HISTORIAL_ACTUAL.length === 0){
-    mostrarStatus('No hay historial cargado para exportar todavía — elegí una subtarea con registros primero.', 'err');
+    mostrarStatus('No hay historial cargado para exportar todavía — elige una subtarea con registros primero.', 'err');
     return;
   }
 
@@ -1197,7 +1197,7 @@ function escaparXML(valor){
 
 function exportarExcel(){
   if(HISTORIAL_ACTUAL.length === 0){
-    mostrarStatus('No hay historial cargado para exportar todavía — elegí una subtarea con registros primero.', 'err');
+    mostrarStatus('No hay historial cargado para exportar todavía — elige una subtarea con registros primero.', 'err');
     return;
   }
 
@@ -1410,7 +1410,7 @@ async function guardarEdicion(id){
     return;
   }
   if(horas > UMBRAL_HORAS_ALTAS){
-    const seguro = await confirmarAccion('Vas a dejar esta entrada en ' + horas + ' horas. ¿Es correcto? (parece un valor alto, revisá que no sea un error de tipeo)', 'Confirmar horas');
+    const seguro = await confirmarAccion('Vas a dejar esta entrada en ' + horas + ' horas. ¿Es correcto? (parece un valor alto, revisa que no sea un error de tipeo)', 'Confirmar horas');
     if(!seguro) return;
   }
 

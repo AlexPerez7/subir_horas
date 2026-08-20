@@ -26,7 +26,7 @@ def _env_obligatoria(nombre):
     if not valor:
         sys.exit(
             f"Falta la variable de entorno obligatoria '{nombre}'. "
-            f"Revisá tu .env local (o el .env de la VM) - ver .env.example."
+            f"Revisa tu .env local (o el .env de la VM) - ver .env.example."
         )
     return valor
 

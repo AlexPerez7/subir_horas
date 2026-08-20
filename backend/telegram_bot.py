@@ -149,7 +149,7 @@ def _texto_ayuda():
         "Hola 👋 Puedo ayudarte con:\n"
         "/resumen — horas de esta semana y este mes\n"
         "/faltantes — días hábiles sin cargar\n"
-        "\"2h hoy: reunión con cliente\" — registra horas (elegís la subtarea con botones)\n"
+        "\"2h hoy: reunión con cliente\" — registra horas (eliges la subtarea con botones)\n"
         "/desvincular — deja de usar el bot con tu cuenta actual"
     )
 
@@ -194,7 +194,7 @@ def _procesar_mensaje_telegram(texto, chat_id, tarjeta):
     if pendiente and pendiente["etapa"] == "esperando_horas":
         horas_valor, detalle = _parsear_horas(texto)
         if horas_valor is None:
-            return "No entendí las horas. Mandame algo como '2h reunión con cliente'.", None
+            return "No entendí las horas. Mándame algo como '2h reunión con cliente'.", None
         teclado = _teclado_subtareas(tarjeta)
         if not teclado:
             del PENDIENTES_TELEGRAM[chat_id]
@@ -234,7 +234,7 @@ def _manejar_vincular(texto, chat_id):
     restante = auth._segundos_bloqueado(_intentos_vincular_telegram, chat_id)
     if restante > 0:
         minutos = int(restante // 60) + 1
-        telegram_enviar_mensaje(chat_id, f"Demasiados intentos fallidos. Probá de nuevo en {minutos} min.")
+        telegram_enviar_mensaje(chat_id, f"Demasiados intentos fallidos. Prueba de nuevo en {minutos} min.")
         return
 
     partes = texto.split(maxsplit=2)
@@ -265,7 +265,7 @@ def _manejar_callback_telegram(callback):
 
     usuario = db.usuario_vinculado(chat_id)
     if not usuario:
-        telegram_responder_callback(callback_id, "Vinculá tu cuenta primero con /vincular.")
+        telegram_responder_callback(callback_id, "Vincula tu cuenta primero con /vincular.")
         return
     tarjeta = usuario["tarjeta"]
 
@@ -274,13 +274,13 @@ def _manejar_callback_telegram(callback):
         PENDIENTES_TELEGRAM[chat_id] = {"etapa": "esperando_horas", "fecha": fecha}
         telegram_responder_callback(callback_id)
         bonita = datetime.strptime(fecha, "%Y-%m-%d").strftime("%d/%m")
-        telegram_editar_mensaje(chat_id, message_id, f"🗓️ {bonita} — mandame las horas y la descripción, ej. '2h reunión con cliente'.")
+        telegram_editar_mensaje(chat_id, message_id, f"🗓️ {bonita} — mándame las horas y la descripción, ej. '2h reunión con cliente'.")
         return
 
     if data.startswith("subtarea:"):
         pendiente = PENDIENTES_TELEGRAM.get(chat_id)
         if not pendiente or pendiente.get("etapa") != "elegir_subtarea":
-            telegram_responder_callback(callback_id, "Se perdió el contexto del registro, empezá de nuevo.")
+            telegram_responder_callback(callback_id, "Se perdió el contexto del registro, empieza de nuevo.")
             return
         try:
             horas._crear_linea_timesheet(int(data.split(":", 1)[1]), pendiente["fecha"], pendiente["horas"], pendiente["detalle"])
@@ -326,7 +326,7 @@ def procesar_webhook(update):
 
     usuario = db.usuario_vinculado(chat_id)
     if not usuario:
-        telegram_enviar_mensaje(chat_id, "No vinculé este chat a ninguna cuenta todavía. Mandá /vincular <usuario> <contraseña> primero.")
+        telegram_enviar_mensaje(chat_id, "No vinculé este chat a ninguna cuenta todavía. Manda /vincular <usuario> <contraseña> primero.")
         return
     tarjeta = usuario["tarjeta"]
 
@@ -341,11 +341,11 @@ def procesar_webhook(update):
         elif comando == "/faltantes":
             respuesta, teclado = _texto_faltantes(tarjeta)
         elif comando == "/registrar":
-            respuesta, teclado = "Mandame algo como '2h hoy: reunión con cliente' y elegís la subtarea con botones.", None
+            respuesta, teclado = "Mándame algo como '2h hoy: reunión con cliente' y eliges la subtarea con botones.", None
         else:
             respuesta, teclado = _procesar_mensaje_telegram(texto, chat_id, tarjeta)
     except Exception as e:
         print(f"[telegram] error procesando mensaje: {e}", file=sys.stderr)
-        respuesta, teclado = "Tuve un problema consultando Odoo. Probá de nuevo en un rato; si sigue, revisá los logs del backend.", None
+        respuesta, teclado = "Tuve un problema consultando Odoo. Prueba de nuevo en un rato; si sigue, revisa los logs del backend.", None
 
     telegram_enviar_mensaje(chat_id, respuesta, teclado)

@@ -26,7 +26,7 @@ def login():
     restante = auth._segundos_bloqueado(_intentos_login, username)
     if restante > 0:
         minutos = int(restante // 60) + 1
-        return jsonify({"error": f"Demasiados intentos fallidos. Probá de nuevo en {minutos} min."}), 429
+        return jsonify({"error": f"Demasiados intentos fallidos. Prueba de nuevo en {minutos} min."}), 429
 
     usuario = db.obtener_usuario(username)
     if not usuario or not check_password_hash(usuario["password_hash"], password):

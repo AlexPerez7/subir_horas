@@ -85,8 +85,8 @@ Los usuarios de la app (login, auditoría, vínculos de Telegram) se guardan en 
 
 El backend le habla a Supabase por su **API REST** (HTTPS/443, paquete `supabase` de Python), no por conexión directa al protocolo de Postgres (puertos 5432/6543) — pensado para redes que solo dejan salir tráfico HTTPS, como suele pasar en redes de oficina. La contra de esto: la API REST no puede crear tablas (no soporta DDL), así que hay un paso manual único de setup que con una conexión directa no hacía falta.
 
-1. Creá una cuenta en [supabase.com](https://supabase.com) y un proyecto nuevo (elegí una contraseña de base de datos y guardala — no la vas a necesitar para esto, pero sirve como respaldo si en algún momento sí necesitás la conexión directa).
-2. **Crear las tablas (una sola vez):** en el proyecto, andá a **SQL Editor → New query**, pegá esto y ejecutalo:
+1. Crea una cuenta en [supabase.com](https://supabase.com) y un proyecto nuevo (elige una contraseña de base de datos y guárdala — no la vas a necesitar para esto, pero sirve como respaldo si en algún momento sí necesitas la conexión directa).
+2. **Crear las tablas (una sola vez):** en el proyecto, ve a **SQL Editor → New query**, pega esto y ejecútalo:
    ```sql
    CREATE TABLE IF NOT EXISTS usuarios (
        username TEXT PRIMARY KEY,
@@ -108,7 +108,7 @@ El backend le habla a Supabase por su **API REST** (HTTPS/443, paquete `supabase
    );
    ```
    Es seguro volver a correrlo (`IF NOT EXISTS`) — si ya tenías estas tablas de una migración anterior, no hace nada.
-3. **Sacar las credenciales de la API:** **Project Settings → API**. Copiá la **Project URL** (`SUPABASE_URL`) y la **`service_role` key** (`SUPABASE_SERVICE_ROLE_KEY`) — **no** la `anon`/`public` key, esa está pensada para exponerse en un frontend y no tiene permisos de escritura sin políticas de Row Level Security adicionales. La `service_role` sí tiene acceso total (equivalente al que ya tenía la conexión directa) y nunca sale del backend, así que es segura.
+3. **Sacar las credenciales de la API:** **Project Settings → API**. Copia la **Project URL** (`SUPABASE_URL`) y la **`service_role` key** (`SUPABASE_SERVICE_ROLE_KEY`) — **no** la `anon`/`public` key, esa está pensada para exponerse en un frontend y no tiene permisos de escritura sin políticas de Row Level Security adicionales. La `service_role` sí tiene acceso total (equivalente al que ya tenía la conexión directa) y nunca sale del backend, así que es segura.
 4. Esas dos van en tu `.env` local y en el `.env` de la VM (ver [Desplegar el backend en tu propia VM](#desplegar-el-backend-en-tu-propia-vm)).
 
 ---
@@ -137,7 +137,7 @@ python -m http.server 5500
 
 Y abrir `http://127.0.0.1:5500/index.html`. En `.env` local, `FRONTEND_ORIGINS` tiene que incluir `http://127.0.0.1:5500`.
 
-En `js/app.js`, cambiá temporalmente `API_BASE` a `http://127.0.0.1:5000` mientras desarrollás (y volvé a poner la URL de Tailscale (`https://*.ts.net`) antes de publicar).
+En `js/app.js`, cambia temporalmente `API_BASE` a `http://127.0.0.1:5000` mientras desarrollas (y vuelve a poner la URL de Tailscale (`https://*.ts.net`) antes de publicar).
 
 Cualquier cambio en `index.html` se ve recargando la pestaña; cambios en `backend_odoo.py` requieren reiniciar el script.
 
@@ -145,7 +145,7 @@ Cualquier cambio en `index.html` se ve recargando la pestaña; cambios en `backe
 
 ## Desplegar el backend en tu propia VM
 
-Backend corriendo como servicio systemd en una VM Ubuntu/Debian propia (siempre encendida), expuesto a internet sin abrir puertos vía [Tailscale Funnel](https://tailscale.com/kb/1223/funnel). A diferencia de un PaaS (Render, Koyeb, etc.), acá no hay auto-deploy ni build gestionado — los pasos de clonar, actualizar e instalar dependencias los corrés vos mismo por SSH/VPN a la VM.
+Backend corriendo como servicio systemd en una VM Ubuntu/Debian propia (siempre encendida), expuesto a internet sin abrir puertos vía [Tailscale Funnel](https://tailscale.com/kb/1223/funnel). A diferencia de un PaaS (Render, Koyeb, etc.), acá no hay auto-deploy ni build gestionado — los pasos de clonar, actualizar e instalar dependencias los corres tú mismo por SSH/VPN a la VM.
 
 **1. Preparar el código en la VM**
 
@@ -156,7 +156,7 @@ cd subir_horas
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 cp .env.example .env
-nano .env   # completá ODOO_URL, ODOO_DB, ODOO_UID, ODOO_TOKEN, SECRET_KEY,
+nano .env   # completa ODOO_URL, ODOO_DB, ODOO_UID, ODOO_TOKEN, SECRET_KEY,
             # SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, FRONTEND_ORIGINS,
             # BOOTSTRAP_ADMIN_*, etc.
 ```
@@ -165,7 +165,7 @@ nano .env   # completá ODOO_URL, ODOO_DB, ODOO_UID, ODOO_TOKEN, SECRET_KEY,
 
 ```bash
 sudo cp deploy/subir-horas.service /etc/systemd/system/subir-horas.service
-sudo nano /etc/systemd/system/subir-horas.service   # ajustá User= y las dos rutas /ruta/a/subir_horas
+sudo nano /etc/systemd/system/subir-horas.service   # ajusta User= y las dos rutas /ruta/a/subir_horas
 sudo systemctl daemon-reload
 sudo systemctl enable --now subir-horas
 sudo systemctl status subir-horas   # debería decir "active (running)"
@@ -181,25 +181,25 @@ sudo tailscale up   # abre un link para autenticar la VM en tu cuenta de Tailsca
 sudo tailscale funnel 8000
 ```
 
-Esto último te da una URL fija tipo `https://tu-maquina.tu-tailnet.ts.net` — copiala, la vas a necesitar en `index.html`. `tailscale funnel status` muestra el estado en cualquier momento; queda activo aunque cierres la sesión SSH (corre como daemon del sistema).
+Esto último te da una URL fija tipo `https://tu-maquina.tu-tailnet.ts.net` — cópiala, la vas a necesitar en `index.html`. `tailscale funnel status` muestra el estado en cualquier momento; queda activo aunque cierres la sesión SSH (corre como daemon del sistema).
 
 **Cosas a tener en cuenta con este esquema:**
 - Sin cold starts ni sleep: al ser una VM propia siempre encendida, el backend responde igual de rápido a cualquier hora — no hace falta ningún workflow tipo "keep-warm".
 - El disco **no es efímero** (a diferencia de un PaaS free): los datos locales sobreviven reinicios de la VM. Los usuarios de todas formas viven en Postgres/Supabase (ver [Configurar Supabase](#configurar-supabase-base-de-datos-persistente)), así que esto no cambia nada del diseño.
-- Tenés acceso `sudo` completo a la VM, así que `scripts/crear_usuario.py` se puede correr directo ahí (`sudo -u CAMBIAR_USUARIO .venv/bin/python scripts/crear_usuario.py ...`) además de desde tu máquina local — igual dejamos el bootstrap por variables de entorno (`BOOTSTRAP_ADMIN_*`, ver [Gestión de usuarios](#gestión-de-usuarios)) como la forma más simple de tener el primer admin sin loguearte a la VM.
+- Tienes acceso `sudo` completo a la VM, así que `scripts/crear_usuario.py` se puede correr directo ahí (`sudo -u CAMBIAR_USUARIO .venv/bin/python scripts/crear_usuario.py ...`) además de desde tu máquina local — igual dejamos el bootstrap por variables de entorno (`BOOTSTRAP_ADMIN_*`, ver [Gestión de usuarios](#gestión-de-usuarios)) como la forma más simple de tener el primer admin sin loguearte a la VM.
 - Actualizar el backend tras un cambio de código es manual: `git pull && sudo systemctl restart subir-horas` en la VM (no hay auto-deploy). Ver [Flujo de actualización](#flujo-de-actualización).
-- Es una VM compartida con otros usos de oficina — confirmá con quien la administre que está bien correr un servicio expuesto públicamente ahí antes de activar el Funnel.
+- Es una VM compartida con otros usos de oficina — confirma con quien la administre que está bien correr un servicio expuesto públicamente ahí antes de activar el Funnel.
 
 ---
 
 ## Publicar el frontend en GitHub Pages
 
-1. Editá `js/app.js`: reemplazá la constante `API_BASE` (primera línea) por la URL real de tu backend en Tailscale Funnel (`https://tu-maquina.tu-tailnet.ts.net`, sin barra final).
-2. Commiteá y pusheá.
-3. En GitHub: **Settings → Pages → Build and deployment → Deploy from a branch**, elegí `main` y carpeta `/ (root)`.
-4. GitHub te da una URL tipo `https://tu-usuario.github.io/subir_horas/`. Copiala en `FRONTEND_ORIGINS` en el `.env` de la VM y reiniciá el servicio (`sudo systemctl restart subir-horas`) para que el CORS la acepte.
+1. Edita `js/app.js`: reemplaza la constante `API_BASE` (primera línea) por la URL real de tu backend en Tailscale Funnel (`https://tu-maquina.tu-tailnet.ts.net`, sin barra final).
+2. Commitea y pushea.
+3. En GitHub: **Settings → Pages → Build and deployment → Deploy from a branch**, elige `main` y carpeta `/ (root)`.
+4. GitHub te da una URL tipo `https://tu-usuario.github.io/subir_horas/`. Cópiala en `FRONTEND_ORIGINS` en el `.env` de la VM y reinicia el servicio (`sudo systemctl restart subir-horas`) para que el CORS la acepte.
 
-> **Nota sobre cuentas Free:** GitHub Pages publica el sitio en una URL pública en internet aunque el repositorio origen sea privado — no hay control de acceso a nivel de Pages en cuentas Free/Pro (eso requiere GitHub Enterprise). Verificá en tu cuenta si Pages está habilitado para repos privados; si no, la alternativa es pasar el repo a público (el código no debería tener datos sensibles hardcodeados, pero repasalo antes). El acceso real a los datos de horas siempre queda detrás del login, así que exponer la página de login no es en sí un problema de seguridad — pero es bueno saberlo de antemano.
+> **Nota sobre cuentas Free:** GitHub Pages publica el sitio en una URL pública en internet aunque el repositorio origen sea privado — no hay control de acceso a nivel de Pages en cuentas Free/Pro (eso requiere GitHub Enterprise). Verifica en tu cuenta si Pages está habilitado para repos privados; si no, la alternativa es pasar el repo a público (el código no debería tener datos sensibles hardcodeados, pero repasalo antes). El acceso real a los datos de horas siempre queda detrás del login, así que exponer la página de login no es en sí un problema de seguridad — pero es bueno saberlo de antemano.
 
 ---
 
@@ -218,7 +218,7 @@ Los íconos están en `icons/` (generados una vez, no hace falta regenerarlos sa
 
 ## Recordatorio y resumen por Telegram
 
-El banner que aparece dentro de la app ("no cargaste ayer") solo lo ves si la abrís. Dos workflows lo complementan de forma proactiva, mandando mensajes por Telegram sin que tengas que abrir el sitio:
+El banner que aparece dentro de la app ("no cargaste ayer") solo lo ves si la abres. Dos workflows lo complementan de forma proactiva, mandando mensajes por Telegram sin que tengas que abrir el sitio:
 
 - [`.github/workflows/recordatorio-telegram.yml`](.github/workflows/recordatorio-telegram.yml) — todas las mañanas de un día hábil consulta al backend y, si falta cargar el día hábil anterior, manda un aviso.
 - [`.github/workflows/resumen-semanal-telegram.yml`](.github/workflows/resumen-semanal-telegram.yml) — todos los viernes manda un resumen con el total de horas de la semana y el detalle por subtarea (usa `/api/resumen-semanal-cron`, protegido por el mismo `CRON_SECRET`).
@@ -237,15 +237,15 @@ Cargalo como `CRON_SECRET` en el `.env` de la VM.
 
 **2. Crear el bot de Telegram**
 
-1. En Telegram, buscá **@BotFather** y mandale `/newbot`.
-2. Elegí un nombre y un username (tiene que terminar en `bot`, ej. `subirhoras_bot`).
+1. En Telegram, busca **@BotFather** y mándale `/newbot`.
+2. Elige un nombre y un username (tiene que terminar en `bot`, ej. `subirhoras_bot`).
 3. Te va a dar un **token** tipo `123456789:AAExxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx` — es el `TELEGRAM_BOT_TOKEN`.
-4. Buscá a tu bot recién creado por su username y mandale cualquier mensaje (ej. "hola") — Telegram no deja que un bot te escriba primero, así que este paso es obligatorio.
-5. Con el token, abrí en el navegador: `https://api.telegram.org/bot<TOKEN>/getUpdates` (reemplazando `<TOKEN>`). En la respuesta JSON buscá `"chat":{"id":...}` — ese número es el `TELEGRAM_CHAT_ID`.
+4. Busca a tu bot recién creado por su username y mándale cualquier mensaje (ej. "hola") — Telegram no deja que un bot te escriba primero, así que este paso es obligatorio.
+5. Con el token, abre en el navegador: `https://api.telegram.org/bot<TOKEN>/getUpdates` (reemplazando `<TOKEN>`). En la respuesta JSON busca `"chat":{"id":...}` — ese número es el `TELEGRAM_CHAT_ID`.
 
 **3. Cargar los secrets en GitHub**
 
-En el repo: **Settings → Secrets and variables → Actions → New repository secret**, y agregá:
+En el repo: **Settings → Secrets and variables → Actions → New repository secret**, y agrega:
 - `CRON_SECRET` — el mismo valor que pusiste en el `.env` de la VM.
 - `TELEGRAM_BOT_TOKEN` — el token que te dio BotFather.
 - `TELEGRAM_CHAT_ID` — el id que sacaste de `getUpdates`.
@@ -256,20 +256,20 @@ Pestaña **Actions → Recordatorio de horas por Telegram → Run workflow** (y 
 
 ### Bot interactivo: preguntarle cosas al bot (y cargar horas)
 
-Además de los avisos automáticos, le podés escribir directo al bot en Telegram. Esto es distinto de los workflows de arriba: en vez de un job periódico que empuja un mensaje, es un **webhook** — Telegram le pega un `POST` a tu backend cada vez que le escribís (o tocás un botón), y el backend responde en el momento (`POST /api/telegram-webhook`, ver [`backend/routes/telegram_routes.py`](backend/routes/telegram_routes.py) y [`backend/telegram_bot.py`](backend/telegram_bot.py)).
+Además de los avisos automáticos, le puedes escribir directo al bot en Telegram. Esto es distinto de los workflows de arriba: en vez de un job periódico que empuja un mensaje, es un **webhook** — Telegram le pega un `POST` a tu backend cada vez que le escribes (o tocas un botón), y el backend responde en el momento (`POST /api/telegram-webhook`, ver [`backend/routes/telegram_routes.py`](backend/routes/telegram_routes.py) y [`backend/telegram_bot.py`](backend/telegram_bot.py)).
 
 Entiende:
 - `/vincular <usuario> <contraseña>` → asocia ese chat de Telegram a tu cuenta de la app (las mismas credenciales del login web). Hace falta hacerlo una sola vez por chat antes de poder usar el resto de los comandos.
 - `/resumen` o **"resumen de esta semana"** → total de horas de la semana y el mes, con el detalle por subtarea.
 - `/faltantes` o **"¿qué días no he subido horas?"** → días hábiles sin cargar de los últimos 10, cada uno con un botón para arrancar la carga de ese día.
 - **"2h hoy: reunión con cliente"** → registra horas directo desde el chat. El bot entiende `hoy`, `ayer` o una fecha `dd/mm`, y la cantidad de horas (`2h`, `1,5 horas`); como Telegram no tiene forma de mandar un desplegable, la subtarea se elige tocando uno de los botones que te ofrece después.
-- `/desvincular` → olvida el vínculo de ese chat (por si vas a re-vincularlo a otra cuenta, o dejás de usar el bot).
+- `/desvincular` → olvida el vínculo de ese chat (por si vas a re-vincularlo a otra cuenta, o dejas de usar el bot).
 
 El bot es **multiusuario**: cualquier cuenta de la app puede vincular su propio chat de Telegram con `/vincular` y usar el bot para su propia tarjeta — no hace falta ser el admin. Un chat sin vincular solo puede usar `/vincular`; para cualquier otro mensaje, el bot pide que te vincules primero. `/vincular` está protegido contra fuerza bruta igual que el login web (se bloquea 5 minutos tras 5 intentos fallidos desde el mismo chat).
 
 **1. Variables de entorno en el `.env` de la VM**
 
-Además de `CRON_SECRET`, cargá en el `.env` de la VM (no en GitHub — estas las usa el backend, no un workflow):
+Además de `CRON_SECRET`, carga en el `.env` de la VM (no en GitHub — estas las usa el backend, no un workflow):
 - `TELEGRAM_BOT_TOKEN` — el mismo token de BotFather.
 - `TELEGRAM_WEBHOOK_SECRET` — una cadena aleatoria nueva (generarla igual que `SECRET_KEY`). Es el mecanismo con el que el backend verifica que el `POST` realmente viene de Telegram y no de cualquiera que le pegue a la URL.
 
@@ -295,7 +295,7 @@ curl -X POST "https://api.telegram.org/bot<TOKEN>/setMyCommands" `
 
 **4. Probar**
 
-Escribile al bot `/vincular tu-usuario tu-contraseña` (las mismas credenciales del login web) y después "resumen" o "¿qué días no he subido horas?" desde Telegram. Como el backend corre siempre encendido en la VM, no debería haber demora de arranque en frío — si tarda, revisá `sudo systemctl status subir-horas` y `sudo tailscale funnel status` en la VM.
+Escríbele al bot `/vincular tu-usuario tu-contraseña` (las mismas credenciales del login web) y después "resumen" o "¿qué días no he subido horas?" desde Telegram. Como el backend corre siempre encendido en la VM, no debería haber demora de arranque en frío — si tarda, revisa `sudo systemctl status subir-horas` y `sudo tailscale funnel status` en la VM.
 
 ---
 
@@ -307,7 +307,7 @@ Escribile al bot `/vincular tu-usuario tu-contraseña` (las mismas credenciales 
 
 Si tu cuenta es admin, al loguearte ves una sección **Usuarios** con:
 - Listado de usuarios existentes (tarjeta asignada, si es admin), con botones para **resetear contraseña** (🔑) o **eliminar** (🗑).
-- Formulario para crear un usuario nuevo: usuario, tarjeta (elegís de la misma lista que ve el selector principal), contraseña inicial, y un checkbox "Es administrador".
+- Formulario para crear un usuario nuevo: usuario, tarjeta (eliges de la misma lista que ve el selector principal), contraseña inicial, y un checkbox "Es administrador".
 
 Por detrás usa los endpoints `GET/POST /api/usuarios`, `POST /api/usuarios/<user>/resetear-password` y `DELETE /api/usuarios/<user>` — todos devuelven 403 si la sesión no es admin. Un admin no puede eliminarse a sí mismo (para no quedarse afuera por accidente).
 
@@ -315,7 +315,7 @@ Debajo del panel hay una tabla de **auditoría** (`GET /api/auditoria`, también
 
 ### Bootstrap: el primer admin
 
-El panel necesita que ya exista al menos un admin logueado. Aunque en la VM propia sí tenés acceso `sudo` y podrías correr [`scripts/crear_usuario.py`](scripts/crear_usuario.py) a mano, es más simple resolver el primer admin con tres variables de entorno (evita tener que loguearte a la VM solo para esto):
+El panel necesita que ya exista al menos un admin logueado. Aunque en la VM propia sí tienes acceso `sudo` y podrías correr [`scripts/crear_usuario.py`](scripts/crear_usuario.py) a mano, es más simple resolver el primer admin con tres variables de entorno (evita tener que loguearte a la VM solo para esto):
 
 ```
 BOOTSTRAP_ADMIN_USERNAME=tu-usuario
@@ -323,9 +323,9 @@ BOOTSTRAP_ADMIN_PASSWORD=una-contraseña-inicial
 BOOTSTRAP_ADMIN_TARJETA=Alex Perez
 ```
 
-Al arrancar, el backend se fija si ya existe un usuario con ese `username`; si no existe, lo crea como admin con esa contraseña y tarjeta. Si ya existe, no hace nada — no pisa una contraseña que hayas cambiado después desde el panel. Cargalas en el `.env` de la VM y reiniciá el servicio (`sudo systemctl restart subir-horas`); con eso ya podés loguearte en el sitio de GitHub Pages y usar el panel **Usuarios** para todo lo demás.
+Al arrancar, el backend se fija si ya existe un usuario con ese `username`; si no existe, lo crea como admin con esa contraseña y tarjeta. Si ya existe, no hace nada — no pisa una contraseña que hayas cambiado después desde el panel. Cárgalas en el `.env` de la VM y reinicia el servicio (`sudo systemctl restart subir-horas`); con eso ya puedes loguearte en el sitio de GitHub Pages y usar el panel **Usuarios** para todo lo demás.
 
-**Dejalas cargadas permanentemente** en el `.env` de todas formas (no las borres después del primer login): con Postgres persistente no hace falta que "recreen" el admin en cada reinicio del servicio, pero siguen siendo una red de seguridad útil, por ejemplo si en algún momento se recrea el proyecto de Supabase desde cero. Ojo con un detalle: si cambiás la contraseña de `BOOTSTRAP_ADMIN_USERNAME` desde el panel y **después** el usuario se borra y se vuelve a crear (por ese escenario de recrear la base desde cero), vuelve a la contraseña que esté en `BOOTSTRAP_ADMIN_PASSWORD` (no la que hayas cambiado) — si querés que el cambio sea permanente, actualizá también la variable de entorno.
+**Déjalas cargadas permanentemente** en el `.env` de todas formas (no las borres después del primer login): con Postgres persistente no hace falta que "recreen" el admin en cada reinicio del servicio, pero siguen siendo una red de seguridad útil, por ejemplo si en algún momento se recrea el proyecto de Supabase desde cero. Ojo con un detalle: si cambias la contraseña de `BOOTSTRAP_ADMIN_USERNAME` desde el panel y **después** el usuario se borra y se vuelve a crear (por ese escenario de recrear la base desde cero), vuelve a la contraseña que esté en `BOOTSTRAP_ADMIN_PASSWORD` (no la que hayas cambiado) — si quieres que el cambio sea permanente, actualiza también la variable de entorno.
 
 [`scripts/crear_usuario.py`](scripts/crear_usuario.py) sigue siendo una alternativa por línea de comandos, corriéndolo desde tu máquina local (con `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` en tu `.env` apuntando al mismo proyecto de Supabase que usa producción):
 
@@ -404,12 +404,12 @@ Los usuarios ya no viven en un archivo local (`usuarios.db` de versiones anterio
 - Al exponer el backend con Tailscale Funnel, el puerto de gunicorn (`127.0.0.1:8000`) nunca queda abierto a la red local ni a internet directamente — solo Tailscale, corriendo en la misma VM, puede hablarle. La única superficie pública es la URL `https://*.ts.net`, con TLS gestionado por Tailscale.
 - Si el token de Odoo llegara a exponerse accidentalmente (capturas, commit erróneo, etc.), hay que **rotarlo** en Odoo lo antes posible. Si se expone `SUPABASE_SERVICE_ROLE_KEY`, regenerala desde el dashboard de Supabase (**Project Settings → API → Reset service_role key**).
 - Las contraseñas de los usuarios de la app se guardan **hasheadas** (`werkzeug.security`), nunca en texto plano, en la tabla `usuarios` de Postgres.
-- CORS en el backend está restringido a los orígenes listados en `FRONTEND_ORIGINS` (no `CORS(app)` abierto). Si en algún momento agregás otro dominio desde el que se sirva el frontend, hay que sumarlo ahí.
+- CORS en el backend está restringido a los orígenes listados en `FRONTEND_ORIGINS` (no `CORS(app)` abierto). Si en algún momento agregas otro dominio desde el que se sirva el frontend, hay que sumarlo ahí.
 - El webhook del bot de Telegram (`POST /api/telegram-webhook`) valida el header `X-Telegram-Bot-Api-Secret-Token` contra `TELEGRAM_WEBHOOK_SECRET`, y además cada chat tiene que vincularse a una cuenta con `/vincular <usuario> <contraseña>` (protegido contra fuerza bruta igual que el login web) antes de poder ver horas o cargarlas — sin vincular, el bot solo responde pidiendo que te vincules. A diferencia del esquema anterior (un único `TELEGRAM_CHAT_ID` fijo, que ignoraba en silencio cualquier otro chat), el bot ahora es descubrible por cualquiera que encuentre su username, así que la única barrera es la contraseña de cada cuenta — no hace falta el username del bot para ser privado, hace falta la contraseña.
-- El login se bloquea 5 minutos para un usuario tras 5 intentos fallidos seguidos (mitiga fuerza bruta básica). El contador vive en memoria del proceso — se resetea en cada redeploy, y solo funciona porque el `Procfile` corre un único worker de gunicorn (si en algún momento se agregan más workers, este esquema necesitaría un store compartido tipo Redis).
+- El login se bloquea 5 minutos para un usuario tras 5 intentos fallidos seguidos (mitiga fuerza bruta básica). El contador vive en memoria del proceso — se resetea en cada reinicio del servicio, y solo funciona porque el service de systemd corre un único worker de gunicorn (si en algún momento se agregan más workers, este esquema necesitaría un store compartido tipo Redis).
 - El login usa un **token firmado** (`itsdangerous`, con `SECRET_KEY`), no una cookie — se eligió así porque las cookies cross-site (`SameSite=None; Secure`) quedan bloqueadas por defecto en varios navegadores (Safari, Brave, Samsung Internet). El token vive en `localStorage` del navegador y viaja en el header `Authorization`. Expira solo a las `SESSION_LIFETIME_HORAS` de haberse emitido (no hay forma de invalidarlo antes de tiempo del lado del servidor — es la contra de no guardar estado de sesión; "cerrar sesión" simplemente lo borra del navegador). Si se filtra un token, expira solo; si hace falta invalidar algo antes, hay que rotar `SECRET_KEY` (invalida *todos* los tokens activos, no solo uno).
 - El sitio publicado en GitHub Pages es **público en internet** aunque el repositorio sea privado (ver nota en [Publicar el frontend](#publicar-el-frontend-en-github-pages)). El login es lo único que protege el acceso a los datos de horas.
-- El empleado de cada línea de horas se resuelve automáticamente según quién está **asignado a la subtarea** (`project.task.user_ids`), no según qué usuario de la app hizo el request. Esto permite, técnicamente, cargar horas "a nombre de" cualquier persona con tarjeta en el proyecto si sos admin — usar esa capacidad con criterio.
+- El empleado de cada línea de horas se resuelve automáticamente según quién está **asignado a la subtarea** (`project.task.user_ids`), no según qué usuario de la app hizo el request. Esto permite, técnicamente, cargar horas "a nombre de" cualquier persona con tarjeta en el proyecto si eres admin — usar esa capacidad con criterio.
 
 ---
 
@@ -442,19 +442,19 @@ Revisar que `buscar_tarea_id()` esté filtrando por `parent_id.name` correctamen
 Correr `GET /api/campos?modelo=<modelo>&q=<palabra>` (como admin) para confirmar el nombre técnico real del campo en esta instancia (varios campos están personalizados vía Odoo Studio, ej. `x_studio_*`).
 
 **El navegador bloquea las llamadas al backend (error de CORS) / la página queda en negro**
-`FRONTEND_ORIGINS` en el backend no incluye el origen exacto desde el que estás sirviendo `index.html`: tiene que ser **solo protocolo + dominio** (ej. `https://tu-usuario.github.io`), sin la ruta del repo (`/subir_horas`) ni barra final — el navegador manda el header `Origin` sin la ruta, así que si la dejás puesta no matchea nunca. Revisar el `.env` en la VM y `sudo systemctl restart subir-horas`. (Si la página queda completamente en blanco/negro sin mostrar ni el login, confirmá que estás en la versión más reciente de `js/app.js` — versiones viejas no manejaban este error y se quedaban sin mostrar nada).
+`FRONTEND_ORIGINS` en el backend no incluye el origen exacto desde el que estás sirviendo `index.html`: tiene que ser **solo protocolo + dominio** (ej. `https://tu-usuario.github.io`), sin la ruta del repo (`/subir_horas`) ni barra final — el navegador manda el header `Origin` sin la ruta, así que si la dejas puesta no matchea nunca. Revisar el `.env` en la VM y `sudo systemctl restart subir-horas`. (Si la página queda completamente en blanco/negro sin mostrar ni el login, confirma que estás en la versión más reciente de `js/app.js` — versiones viejas no manejaban este error y se quedaban sin mostrar nada).
 
 **Me loguea bien pero después cada request da 401 ("no autenticado")**
-El token puede haber expirado (dura `SESSION_LIFETIME_HORAS`, default 8) — volvé a loguearte. Si pasa inmediatamente después de loguearte, revisá en las herramientas de desarrollador (Network) que el pedido a `/api/whoami` esté mandando el header `Authorization: Bearer ...` — si no lo manda, puede ser que `localStorage` esté deshabilitado o bloqueado (modo incógnito estricto, alguna extensión).
+El token puede haber expirado (dura `SESSION_LIFETIME_HORAS`, default 8) — vuelve a loguearte. Si pasa inmediatamente después de loguearte, revisa en las herramientas de desarrollador (Network) que el pedido a `/api/whoami` esté mandando el header `Authorization: Bearer ...` — si no lo manda, puede ser que `localStorage` esté deshabilitado o bloqueado (modo incógnito estricto, alguna extensión).
 
 **No puedo loguearme después de reiniciar el backend**
-Con Postgres en Supabase esto no debería pasar (los usuarios persisten entre reinicios del servicio). Si pasa: revisá que `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` en el `.env` de la VM sean exactamente los mismos que venías usando (un typo o apuntar a otro proyecto de Supabase por error crea/usa una base vacía). Si además tenés `BOOTSTRAP_ADMIN_*` cargadas, al menos ese admin se recrea solo — reiniciá el servicio y reintentá con esas credenciales.
+Con Postgres en Supabase esto no debería pasar (los usuarios persisten entre reinicios del servicio). Si pasa: revisa que `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` en el `.env` de la VM sean exactamente los mismos que venías usando (un typo o apuntar a otro proyecto de Supabase por error crea/usa una base vacía). Si además tienes `BOOTSTRAP_ADMIN_*` cargadas, al menos ese admin se recrea solo — reinicia el servicio y reintenta con esas credenciales.
 
 **El backend tarda muchísimo o nunca responde (incluso `curl http://127.0.0.1:8000/` local se cuelga)**
-Si el arranque del proceso se queda colgado silenciosamente (sin error, pero tampoco responde ningún request), sospechá primero de la conexión a Supabase — con la API REST esto no debería pasar (es HTTPS/443, igual que cualquier navegación web normal), pero si por error quedó configurado algo que intenta una conexión directa a Postgres (puertos 5432/6543) en una red que bloquea esos puertos, el proceso se cuelga esperando un timeout de TCP que puede tardar minutos. Revisá `journalctl -u subir-horas -n 50 --no-pager` y confirmá que `SUPABASE_URL` (no `DATABASE_URL`) esté cargada.
+Si el arranque del proceso se queda colgado silenciosamente (sin error, pero tampoco responde ningún request), sospecha primero de la conexión a Supabase — con la API REST esto no debería pasar (es HTTPS/443, igual que cualquier navegación web normal), pero si por error quedó configurado algo que intenta una conexión directa a Postgres (puertos 5432/6543) en una red que bloquea esos puertos, el proceso se cuelga esperando un timeout de TCP que puede tardar minutos. Revisa `journalctl -u subir-horas -n 50 --no-pager` y confirma que `SUPABASE_URL` (no `DATABASE_URL`) esté cargada.
 
 **El servicio no arranca / `sudo systemctl status subir-horas` muestra `failed`**
 `journalctl -u subir-horas -n 50 --no-pager` muestra el error real (falta una variable de entorno obligatoria, rutas mal puestas en el `.service`, el venv no tiene las dependencias instaladas, etc.). Los errores de configuración faltante (`config.py`) salen ahí con un mensaje explícito de qué variable falta.
 
 **La URL de Tailscale Funnel no responde desde afuera**
-`sudo tailscale funnel status` confirma que el Funnel sigue activo (se desactiva si reiniciás la VM y no configuraste que arranque solo — revisar `tailscale up` con las flags de persistencia, o simplemente volver a correr `sudo tailscale funnel 8000` tras un reinicio). También confirmá que el servicio de systemd esté `active (running)` — Funnel solo expone lo que ya está escuchando en `127.0.0.1:8000`, no lo levanta él.
+`sudo tailscale funnel status` confirma que el Funnel sigue activo (se desactiva si reinicias la VM y no configuraste que arranque solo — revisar `tailscale up` con las flags de persistencia, o simplemente volver a correr `sudo tailscale funnel 8000` tras un reinicio). También confirma que el servicio de systemd esté `active (running)` — Funnel solo expone lo que ya está escuchando en `127.0.0.1:8000`, no lo levanta él.
