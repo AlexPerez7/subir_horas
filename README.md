@@ -249,9 +249,12 @@ Commitea y pushea cualquier cambio a `main` (o **Actions → Deploy automático 
 
 ## CI
 
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) corre en cada push y pull request (en runners normales de GitHub, no en el self-hosted): compila todos los `.py` de `backend/`, `scripts/` y `backend_odoo.py` (`python -m py_compile`, solo chequea sintaxis, no importa nada — así no necesita ninguna variable de entorno) y valida la sintaxis de `js/app.js` (`node --check`). Atrapa errores tontos (typos, paréntesis sin cerrar) antes de que un push dispare el deploy automático a la VM.
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) corre en cada push y pull request (en runners normales de GitHub, no en el self-hosted), con tres jobs en paralelo:
+- **Sintaxis Python**: `python -m py_compile` sobre todos los `.py` de `backend/`, `scripts/` y `backend_odoo.py` — solo chequea sintaxis, no importa nada, así que no necesita ninguna variable de entorno.
+- **Sintaxis JS**: `node --check js/app.js`.
+- **Tests**: corre [`tests/test_horas.py`](tests/test_horas.py) con `pytest` — cubre las funciones puras de `backend/horas.py` (días hábiles, parseo de fechas del buscador, validación de horas), sin hablar con Odoo ni Supabase de verdad. [`conftest.py`](conftest.py) (en la raíz) le da a `backend/config.py` variables de entorno dummy solo para que el paquete se pueda importar en el test runner.
 
-No reemplaza tests reales (no hay suite de tests para la lógica de negocio en `backend/horas.py` todavía) — es solo una red mínima de sintaxis.
+Atrapa errores tontos (typos, paréntesis sin cerrar) y de lógica (ej. un cambio que rompa el cálculo de "día hábil anterior") antes de que un push dispare el deploy automático a la VM. No cubre el resto del backend (rutas, Odoo, Supabase) — eso requeriría mockear esas dependencias, con más esfuerzo y menos beneficio inmediato.
 
 ---
 
@@ -423,6 +426,7 @@ subir_horas/
 ├── .env                  # credenciales locales (NO se sube a git)
 ├── .env.example           # plantilla sin datos reales
 ├── .gitignore
+├── conftest.py             # env vars dummy para que pytest pueda importar backend/
 ├── index.html              # esqueleto del frontend (se publica tal cual en GitHub Pages)
 ├── css/
 │   └── style.css          # estilos de index.html
@@ -453,7 +457,10 @@ subir_horas/
 │   └── routes/                 # un blueprint por área de la API
 ├── scripts/
 │   └── crear_usuario.py    # CLI para crear/resetear usuarios
+├── tests/
+│   └── test_horas.py       # tests de las funciones puras de backend/horas.py
 ├── requirements.txt       # dependencias del backend
+├── requirements-dev.txt   # requirements.txt + pytest (solo para desarrollo/CI)
 ├── .venv/                 # entorno virtual local (ignorado)
 └── __pycache__/           # (ignorado)
 ```

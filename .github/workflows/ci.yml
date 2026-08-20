@@ -1,10 +1,13 @@
 name: CI
 
-# Chequeo liviano en cada push/PR: sintaxis Python válida (py_compile,
-# no importa nada asi que no necesita ninguno de los secrets/env vars
-# obligatorias de backend/config.py) y sintaxis JS válida (node --check).
-# No reemplaza tests, pero atrapa errores tontos (typos, paréntesis sin
-# cerrar) antes de que lleguen a la VM via el deploy automático.
+# Chequeo en cada push/PR: sintaxis Python válida (py_compile, no
+# importa nada asi que no necesita ninguno de los secrets/env vars
+# obligatorias de backend/config.py), sintaxis JS válida (node
+# --check), y los tests de tests/ (funciones puras de backend/horas.py
+# - fechas y validaciones, sin hablar con Odoo ni Supabase; ver
+# conftest.py en la raíz para las env vars dummy que necesita
+# backend/config.py para poder importarse). Atrapa errores tontos y de
+# lógica antes de que lleguen a la VM via el deploy automático.
 
 on:
   push:
@@ -34,3 +37,15 @@ jobs:
           node-version: "20"
       - name: Chequear sintaxis de js/app.js
         run: node --check js/app.js
+
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Instalar dependencias (incluye pytest)
+        run: pip install -q -r requirements-dev.txt
+      - name: Correr tests
+        run: python -m pytest -q

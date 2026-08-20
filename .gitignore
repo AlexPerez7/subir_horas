@@ -12,6 +12,7 @@ env/
 __pycache__/
 *.pyc
 *.pyo
+.pytest_cache/
 
 # Editor / SO
 .vscode/
