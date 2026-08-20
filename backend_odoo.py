@@ -1,5 +1,5 @@
 """
-Punto de entrada para gunicorn (ver Procfile: `gunicorn backend_odoo:app`).
+Punto de entrada para gunicorn (ver deploy/subir-horas.service: `gunicorn backend_odoo:app`).
 La app real vive en el paquete backend/ (ver backend/__init__.py para la
 documentación completa) - este archivo solo la crea y la expone como `app`
 para no tener que tocar el ExecStart del servicio de systemd en la VM.

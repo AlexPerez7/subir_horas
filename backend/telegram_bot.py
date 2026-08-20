@@ -21,7 +21,7 @@ así que la subtarea se elige con botones inline en un segundo paso.
 Mientras se espera esa elección (o las horas, si el registro arrancó
 tocando un botón de "día sin cargar"), el estado pendiente vive en
 PENDIENTES_TELEGRAM, en memoria del proceso - igual que los diccionarios de
-auth.py: el Procfile corre un único worker de gunicorn, así que no hace
+auth.py: el service de systemd corre un único worker de gunicorn, así que no hace
 falta compartir esto entre procesos. Si el server se reinicia a mitad de un
 registro simplemente se pierde y hay que volver a escribir, no es grave.
 

@@ -1,164 +1,123 @@
 """
-Capa de acceso a datos (Postgres en Supabase): cuentas de la app, auditoría
-de acciones de administración, y el vínculo chat_id de Telegram → cuenta.
-Sin dependencia de Flask - las rutas pasan explícitamente lo que necesitan
-(ej. el actor de una auditoría) en vez de que este módulo lea `g` por su
-cuenta.
+Capa de acceso a datos (Supabase, vía su API REST/PostgREST sobre HTTPS):
+cuentas de la app, auditoría de acciones de administración, y el vínculo
+chat_id de Telegram → cuenta. Sin dependencia de Flask - las rutas pasan
+explícitamente lo que necesitan (ej. el actor de una auditoría) en vez de
+que este módulo lea `g` por su cuenta.
 
-A diferencia de una conexión SQLite a un archivo local (prácticamente
-gratis), cada conexión a Supabase es una conexión TCP+TLS a un servidor
-remoto - abrir una nueva por cada consulta sería lento. Se usa un pool
-chico reusado durante toda la vida del proceso (alcanza con 1-5 conexiones:
-el Procfile corre un único worker de gunicorn, sin threading, así que nunca
-hay más de un request adentro de este módulo a la vez).
+Usa la API REST de Supabase (paquete `supabase`, habla HTTPS/443) en vez
+de una conexión directa por el protocolo de Postgres (`psycopg2`, puertos
+5432/6543) porque el backend corre en una red que solo deja salir tráfico
+HTTPS - ver README, "Configurar Supabase". Usa la `service_role` key (no
+la `anon`), que bypassea Row Level Security: es el equivalente al acceso
+total que ya tenía la conexión directa a Postgres, y como esta key nunca
+sale del backend (el navegador no le habla nunca a Supabase directo), es
+seguro.
+
+Consecuencia de usar la API REST: no se pueden crear tablas desde acá
+(PostgREST no soporta DDL) - las tablas se crean una única vez a mano en
+el SQL Editor de Supabase, ver README.
 """
 
-from contextlib import contextmanager
 from datetime import datetime
 
-import psycopg2
-import psycopg2.extras
-import psycopg2.pool
+from supabase import create_client
 from werkzeug.security import generate_password_hash
 
 from . import config
 
-_pool = psycopg2.pool.ThreadedConnectionPool(1, 5, dsn=config.DATABASE_URL)
-
-
-@contextmanager
-def _cursor(dict_rows=False):
-    """Pide una conexión del pool, entrega un cursor, y al salir hace commit
-    (o rollback si hubo una excepción) antes de devolver la conexión al
-    pool - fundamental con conexiones reusadas: una que vuelve al pool en
-    medio de una transacción rota deja fallando al próximo que la use."""
-    con = _pool.getconn()
-    try:
-        cursor_factory = psycopg2.extras.RealDictCursor if dict_rows else None
-        with con.cursor(cursor_factory=cursor_factory) as cur:
-            yield cur
-        con.commit()
-    except Exception:
-        con.rollback()
-        raise
-    finally:
-        _pool.putconn(con)
+_client = create_client(config.SUPABASE_URL, config.SUPABASE_SERVICE_ROLE_KEY)
 
 
 def _inicializar_db():
-    with _cursor() as cur:
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS usuarios (
-                username TEXT PRIMARY KEY,
-                password_hash TEXT NOT NULL,
-                tarjeta TEXT NOT NULL,
-                es_admin INTEGER NOT NULL DEFAULT 0
-            )
-        """)
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS auditoria (
-                id SERIAL PRIMARY KEY,
-                ts TEXT NOT NULL,
-                actor TEXT NOT NULL,
-                accion TEXT NOT NULL,
-                detalle TEXT
-            )
-        """)
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS telegram_links (
-                chat_id TEXT PRIMARY KEY,
-                username TEXT NOT NULL,
-                linked_at TEXT NOT NULL
-            )
-        """)
+    """No-op a propósito: a diferencia de una conexión Postgres directa,
+    la API REST no puede correr CREATE TABLE. Las tablas (usuarios,
+    auditoria, telegram_links) se crean una única vez a mano en el SQL
+    Editor de Supabase - ver README, "Configurar Supabase"."""
+    pass
 
 
 def registrar_auditoria(actor, accion, detalle=""):
     """
     Deja rastro de una acción de administración (crear/eliminar
-    usuario, resetear contraseña). Registro permanente (Postgres en
-    Supabase) - a diferencia de la época de SQLite en el disco del
-    backend, ya no se pierde al reiniciar el servicio.
+    usuario, resetear contraseña). Registro permanente en Supabase -
+    no se pierde al reiniciar el servicio.
     """
-    with _cursor() as cur:
-        cur.execute(
-            "INSERT INTO auditoria (ts, actor, accion, detalle) VALUES (%s, %s, %s, %s)",
-            (datetime.utcnow().isoformat(timespec="seconds") + "Z", actor, accion, detalle),
-        )
+    _client.table("auditoria").insert({
+        "ts": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+        "actor": actor,
+        "accion": accion,
+        "detalle": detalle,
+    }).execute()
 
 
 def listar_auditoria(limite=50):
-    with _cursor(dict_rows=True) as cur:
-        cur.execute(
-            "SELECT ts, actor, accion, detalle FROM auditoria ORDER BY id DESC LIMIT %s", (limite,)
-        )
-        filas = cur.fetchall()
-    return [dict(f) for f in filas]
+    res = (
+        _client.table("auditoria")
+        .select("ts,actor,accion,detalle")
+        .order("id", desc=True)
+        .limit(limite)
+        .execute()
+    )
+    return res.data
 
 
 def obtener_usuario(username):
-    with _cursor(dict_rows=True) as cur:
-        cur.execute(
-            "SELECT username, password_hash, tarjeta, es_admin FROM usuarios WHERE username = %s",
-            (username,),
-        )
-        fila = cur.fetchone()
-    return dict(fila) if fila else None
+    res = (
+        _client.table("usuarios")
+        .select("username,password_hash,tarjeta,es_admin")
+        .eq("username", username)
+        .execute()
+    )
+    return res.data[0] if res.data else None
 
 
 def listar_usuarios():
-    with _cursor(dict_rows=True) as cur:
-        cur.execute("SELECT username, tarjeta, es_admin FROM usuarios ORDER BY username")
-        filas = cur.fetchall()
-    return [dict(f) for f in filas]
+    res = _client.table("usuarios").select("username,tarjeta,es_admin").order("username").execute()
+    return res.data
 
 
 def crear_usuario(username, password_hash, tarjeta, es_admin):
-    with _cursor() as cur:
-        cur.execute(
-            "INSERT INTO usuarios (username, password_hash, tarjeta, es_admin) VALUES (%s, %s, %s, %s)",
-            (username, password_hash, tarjeta, int(es_admin)),
-        )
+    _client.table("usuarios").insert({
+        "username": username,
+        "password_hash": password_hash,
+        "tarjeta": tarjeta,
+        "es_admin": int(es_admin),
+    }).execute()
 
 
 def eliminar_usuario(username):
-    with _cursor() as cur:
-        cur.execute("DELETE FROM usuarios WHERE username = %s", (username,))
-        return cur.rowcount > 0
+    res = _client.table("usuarios").delete().eq("username", username).execute()
+    return len(res.data) > 0
 
 
 def actualizar_password(username, nuevo_hash):
-    with _cursor() as cur:
-        cur.execute("UPDATE usuarios SET password_hash = %s WHERE username = %s", (nuevo_hash, username))
+    _client.table("usuarios").update({"password_hash": nuevo_hash}).eq("username", username).execute()
 
 
 def vincular_telegram(chat_id, username):
     """Asocia un chat_id de Telegram a una cuenta de la app (ver /vincular
     en el bot). Un chat_id solo puede estar vinculado a un username a la vez
     - re-vincular pisa el vínculo anterior."""
-    with _cursor() as cur:
-        cur.execute(
-            "INSERT INTO telegram_links (chat_id, username, linked_at) VALUES (%s, %s, %s) "
-            "ON CONFLICT (chat_id) DO UPDATE SET username = excluded.username, linked_at = excluded.linked_at",
-            (chat_id, username, datetime.utcnow().isoformat(timespec="seconds") + "Z"),
-        )
+    _client.table("telegram_links").upsert({
+        "chat_id": chat_id,
+        "username": username,
+        "linked_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+    }).execute()
 
 
 def desvincular_telegram(chat_id):
-    with _cursor() as cur:
-        cur.execute("DELETE FROM telegram_links WHERE chat_id = %s", (chat_id,))
-        return cur.rowcount > 0
+    res = _client.table("telegram_links").delete().eq("chat_id", chat_id).execute()
+    return len(res.data) > 0
 
 
 def usuario_vinculado(chat_id):
     """Devuelve el usuario (con su tarjeta) vinculado a este chat_id de
     Telegram, o None si el chat todavía no hizo /vincular."""
-    with _cursor(dict_rows=True) as cur:
-        cur.execute("SELECT username FROM telegram_links WHERE chat_id = %s", (chat_id,))
-        fila = cur.fetchone()
-    if not fila:
+    res = _client.table("telegram_links").select("username").eq("chat_id", chat_id).execute()
+    if not res.data:
         return None
-    return obtener_usuario(fila["username"])
+    return obtener_usuario(res.data[0]["username"])
 
 
 def _bootstrap_admin():

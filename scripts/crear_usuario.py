@@ -2,8 +2,8 @@
 CLI para crear o resetear usuarios de la app (tabla `usuarios` en Postgres,
 ver backend/db.py) - usa las mismas funciones que la API, no SQL propio.
 
-Uso (desde la raíz del repo, con DATABASE_URL disponible en tu .env o
-variables de entorno):
+Uso (desde la raíz del repo, con SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY
+disponibles en tu .env o variables de entorno):
     python scripts/crear_usuario.py <username> <tarjeta> [--admin]
     python scripts/crear_usuario.py <username> --reset-password
 """
@@ -43,8 +43,6 @@ def main():
     args = parser.parse_args()
 
     username = args.username.strip().lower()
-
-    db._inicializar_db()  # por si se corre contra un Postgres recién creado, sin tablas todavía
 
     if args.reset_password:
         password = pedir_password()

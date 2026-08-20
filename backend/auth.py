@@ -45,7 +45,7 @@ def requiere_admin():
 
 
 # Bloqueo simple tras varios intentos fallidos, en memoria del proceso (no
-# en la base de datos): alcanza porque el Procfile corre un único worker de
+# en la base de datos): alcanza porque el service de systemd corre un único worker de
 # gunicorn, así que no hace falta coordinar estado entre procesos. Este
 # contador sí se resetea en cada redeploy (a diferencia de los usuarios,
 # que viven en Postgres) - no tiene mayor impacto, vuelve a arrancar en

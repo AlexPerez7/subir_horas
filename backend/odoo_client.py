@@ -6,7 +6,7 @@ frecuencia (los edita un admin directo en Odoo), así que 60s de staleness
 es un costo aceptable a cambio de no repetir 3-4 llamadas JSON-RPC por cada
 carga de página o cada línea de una carga en lote. Mismo criterio que los
 diccionarios en memoria de auth.py/telegram_bot.py: alcanza con memoria del
-proceso porque el Procfile corre un único worker.
+proceso porque el service de systemd corre un único worker.
 """
 
 import time

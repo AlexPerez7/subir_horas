@@ -83,17 +83,40 @@ Además de cargar/editar/eliminar horas y ver el historial en vivo:
 
 Los usuarios de la app (login, auditoría, vínculos de Telegram) se guardan en Postgres, en un proyecto de [Supabase](https://supabase.com) — free tier, con almacenamiento persistente y gestionado, independiente de la VM del backend.
 
-1. Creá una cuenta en [supabase.com](https://supabase.com) y un proyecto nuevo (elegí una contraseña de base de datos y guardala, la vas a necesitar).
-2. En el proyecto: **Project Settings → Database → Connection string**, pestaña **Transaction** (puerto `6543`, **no** la de conexión directa — esa requiere IPv6 de salida, que no todos los hosts soportan de forma confiable). Copiá la URI completa y reemplazá `[YOUR-PASSWORD]` por la contraseña que elegiste.
-3. Esa URI es tu `DATABASE_URL` — va en tu `.env` local y en el `.env` de la VM (ver [Desplegar el backend en tu propia VM](#desplegar-el-backend-en-tu-propia-vm)).
-4. No hace falta crear las tablas a mano: el backend las crea solo al arrancar (`CREATE TABLE IF NOT EXISTS`, ver [`backend/db.py`](backend/db.py)) — tanto la primera vez como si en algún momento recreás el proyecto de Supabase desde cero.
+El backend le habla a Supabase por su **API REST** (HTTPS/443, paquete `supabase` de Python), no por conexión directa al protocolo de Postgres (puertos 5432/6543) — pensado para redes que solo dejan salir tráfico HTTPS, como suele pasar en redes de oficina. La contra de esto: la API REST no puede crear tablas (no soporta DDL), así que hay un paso manual único de setup que con una conexión directa no hacía falta.
+
+1. Creá una cuenta en [supabase.com](https://supabase.com) y un proyecto nuevo (elegí una contraseña de base de datos y guardala — no la vas a necesitar para esto, pero sirve como respaldo si en algún momento sí necesitás la conexión directa).
+2. **Crear las tablas (una sola vez):** en el proyecto, andá a **SQL Editor → New query**, pegá esto y ejecutalo:
+   ```sql
+   CREATE TABLE IF NOT EXISTS usuarios (
+       username TEXT PRIMARY KEY,
+       password_hash TEXT NOT NULL,
+       tarjeta TEXT NOT NULL,
+       es_admin INTEGER NOT NULL DEFAULT 0
+   );
+   CREATE TABLE IF NOT EXISTS auditoria (
+       id SERIAL PRIMARY KEY,
+       ts TEXT NOT NULL,
+       actor TEXT NOT NULL,
+       accion TEXT NOT NULL,
+       detalle TEXT
+   );
+   CREATE TABLE IF NOT EXISTS telegram_links (
+       chat_id TEXT PRIMARY KEY,
+       username TEXT NOT NULL,
+       linked_at TEXT NOT NULL
+   );
+   ```
+   Es seguro volver a correrlo (`IF NOT EXISTS`) — si ya tenías estas tablas de una migración anterior, no hace nada.
+3. **Sacar las credenciales de la API:** **Project Settings → API**. Copiá la **Project URL** (`SUPABASE_URL`) y la **`service_role` key** (`SUPABASE_SERVICE_ROLE_KEY`) — **no** la `anon`/`public` key, esa está pensada para exponerse en un frontend y no tiene permisos de escritura sin políticas de Row Level Security adicionales. La `service_role` sí tiene acceso total (equivalente al que ya tenía la conexión directa) y nunca sale del backend, así que es segura.
+4. Esas dos van en tu `.env` local y en el `.env` de la VM (ver [Desplegar el backend en tu propia VM](#desplegar-el-backend-en-tu-propia-vm)).
 
 ---
 
 ## Configuración inicial
 
 1. Copia [`.env.example`](.env.example) como `.env` (mismo nivel que `backend_odoo.py`).
-2. Completa con tus credenciales reales de Odoo, una `SECRET_KEY` propia, el `DATABASE_URL` de Supabase (ver arriba) y, más adelante, la URL de tu sitio de GitHub Pages en `FRONTEND_ORIGINS`.
+2. Completa con tus credenciales reales de Odoo, una `SECRET_KEY` propia, `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` (ver arriba) y, más adelante, la URL de tu sitio de GitHub Pages en `FRONTEND_ORIGINS`.
 3. **`.env` nunca se sube a git** (está en `.gitignore`) — contiene el token de Odoo y la contraseña de la base de datos.
 
 ---
@@ -134,7 +157,8 @@ python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 cp .env.example .env
 nano .env   # completá ODOO_URL, ODOO_DB, ODOO_UID, ODOO_TOKEN, SECRET_KEY,
-            # DATABASE_URL (de Supabase), FRONTEND_ORIGINS, BOOTSTRAP_ADMIN_*, etc.
+            # SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, FRONTEND_ORIGINS,
+            # BOOTSTRAP_ADMIN_*, etc.
 ```
 
 **2. Correrlo como servicio systemd** (para que sobreviva reinicios de la VM y se reinicie solo si crashea)
@@ -303,7 +327,7 @@ Al arrancar, el backend se fija si ya existe un usuario con ese `username`; si n
 
 **Dejalas cargadas permanentemente** en el `.env` de todas formas (no las borres después del primer login): con Postgres persistente no hace falta que "recreen" el admin en cada reinicio del servicio, pero siguen siendo una red de seguridad útil, por ejemplo si en algún momento se recrea el proyecto de Supabase desde cero. Ojo con un detalle: si cambiás la contraseña de `BOOTSTRAP_ADMIN_USERNAME` desde el panel y **después** el usuario se borra y se vuelve a crear (por ese escenario de recrear la base desde cero), vuelve a la contraseña que esté en `BOOTSTRAP_ADMIN_PASSWORD` (no la que hayas cambiado) — si querés que el cambio sea permanente, actualizá también la variable de entorno.
 
-[`scripts/crear_usuario.py`](scripts/crear_usuario.py) sigue siendo una alternativa por línea de comandos, corriéndolo desde tu máquina local (con `DATABASE_URL` en tu `.env` apuntando al mismo proyecto de Supabase que usa producción):
+[`scripts/crear_usuario.py`](scripts/crear_usuario.py) sigue siendo una alternativa por línea de comandos, corriéndolo desde tu máquina local (con `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` en tu `.env` apuntando al mismo proyecto de Supabase que usa producción):
 
 ```powershell
 python scripts/crear_usuario.py <username> "<Nombre exacto de la tarjeta en Odoo>" --admin
@@ -376,9 +400,9 @@ Los usuarios ya no viven en un archivo local (`usuarios.db` de versiones anterio
 
 ## Seguridad
 
-- El `.env` contiene un token de API real con permisos de escritura sobre Odoo, y la contraseña de la base de datos de Supabase (dentro de `DATABASE_URL`). **Nunca** se commitea, ni se comparte por chat/capturas de pantalla sin tapar esos valores. Lo mismo aplica al `.env` que vive en la VM.
+- El `.env` contiene un token de API real con permisos de escritura sobre Odoo, y la `SUPABASE_SERVICE_ROLE_KEY` (acceso total a la base, bypassea Row Level Security). **Nunca** se commitea, ni se comparte por chat/capturas de pantalla sin tapar esos valores. Lo mismo aplica al `.env` que vive en la VM.
 - Al exponer el backend con Tailscale Funnel, el puerto de gunicorn (`127.0.0.1:8000`) nunca queda abierto a la red local ni a internet directamente — solo Tailscale, corriendo en la misma VM, puede hablarle. La única superficie pública es la URL `https://*.ts.net`, con TLS gestionado por Tailscale.
-- Si el token de Odoo llegara a exponerse accidentalmente (capturas, commit erróneo, etc.), hay que **rotarlo** en Odoo lo antes posible. Si se expone `DATABASE_URL`, rotá la contraseña de la base desde el dashboard de Supabase (**Project Settings → Database**).
+- Si el token de Odoo llegara a exponerse accidentalmente (capturas, commit erróneo, etc.), hay que **rotarlo** en Odoo lo antes posible. Si se expone `SUPABASE_SERVICE_ROLE_KEY`, regenerala desde el dashboard de Supabase (**Project Settings → API → Reset service_role key**).
 - Las contraseñas de los usuarios de la app se guardan **hasheadas** (`werkzeug.security`), nunca en texto plano, en la tabla `usuarios` de Postgres.
 - CORS en el backend está restringido a los orígenes listados en `FRONTEND_ORIGINS` (no `CORS(app)` abierto). Si en algún momento agregás otro dominio desde el que se sirva el frontend, hay que sumarlo ahí.
 - El webhook del bot de Telegram (`POST /api/telegram-webhook`) valida el header `X-Telegram-Bot-Api-Secret-Token` contra `TELEGRAM_WEBHOOK_SECRET`, y además cada chat tiene que vincularse a una cuenta con `/vincular <usuario> <contraseña>` (protegido contra fuerza bruta igual que el login web) antes de poder ver horas o cargarlas — sin vincular, el bot solo responde pidiendo que te vincules. A diferencia del esquema anterior (un único `TELEGRAM_CHAT_ID` fijo, que ignoraba en silencio cualquier otro chat), el bot ahora es descubrible por cualquiera que encuentre su username, así que la única barrera es la contraseña de cada cuenta — no hace falta el username del bot para ser privado, hace falta la contraseña.
@@ -424,10 +448,10 @@ Correr `GET /api/campos?modelo=<modelo>&q=<palabra>` (como admin) para confirmar
 El token puede haber expirado (dura `SESSION_LIFETIME_HORAS`, default 8) — volvé a loguearte. Si pasa inmediatamente después de loguearte, revisá en las herramientas de desarrollador (Network) que el pedido a `/api/whoami` esté mandando el header `Authorization: Bearer ...` — si no lo manda, puede ser que `localStorage` esté deshabilitado o bloqueado (modo incógnito estricto, alguna extensión).
 
 **No puedo loguearme después de reiniciar el backend**
-Con Postgres en Supabase esto no debería pasar (los usuarios persisten entre reinicios del servicio). Si pasa: revisá que `DATABASE_URL` en el `.env` de la VM sea exactamente el mismo que venías usando (un typo o apuntar a otro proyecto de Supabase por error crea/usa una base vacía). Si además tenés `BOOTSTRAP_ADMIN_*` cargadas, al menos ese admin se recrea solo — reiniciá el servicio y reintentá con esas credenciales.
+Con Postgres en Supabase esto no debería pasar (los usuarios persisten entre reinicios del servicio). Si pasa: revisá que `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` en el `.env` de la VM sean exactamente los mismos que venías usando (un typo o apuntar a otro proyecto de Supabase por error crea/usa una base vacía). Si además tenés `BOOTSTRAP_ADMIN_*` cargadas, al menos ese admin se recrea solo — reiniciá el servicio y reintentá con esas credenciales.
 
-**`OperationalError` / `could not connect to server` al arrancar el backend**
-`DATABASE_URL` mal configurada, o usando la conexión **directa** de Supabase en vez de la del **Transaction pooler** (puerto 6543) — la directa requiere IPv6 de salida, que no todos los hosts soportan de forma confiable. Ver [Configurar Supabase](#configurar-supabase-base-de-datos-persistente).
+**El backend tarda muchísimo o nunca responde (incluso `curl http://127.0.0.1:8000/` local se cuelga)**
+Si el arranque del proceso se queda colgado silenciosamente (sin error, pero tampoco responde ningún request), sospechá primero de la conexión a Supabase — con la API REST esto no debería pasar (es HTTPS/443, igual que cualquier navegación web normal), pero si por error quedó configurado algo que intenta una conexión directa a Postgres (puertos 5432/6543) en una red que bloquea esos puertos, el proceso se cuelga esperando un timeout de TCP que puede tardar minutos. Revisá `journalctl -u subir-horas -n 50 --no-pager` y confirmá que `SUPABASE_URL` (no `DATABASE_URL`) esté cargada.
 
 **El servicio no arranca / `sudo systemctl status subir-horas` muestra `failed`**
 `journalctl -u subir-horas -n 50 --no-pager` muestra el error real (falta una variable de entorno obligatoria, rutas mal puestas en el `.service`, el venv no tiene las dependencias instaladas, etc.). Los errores de configuración faltante (`config.py`) salen ahí con un mensaje explícito de qué variable falta.

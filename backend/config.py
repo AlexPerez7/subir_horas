@@ -11,7 +11,7 @@ import sys
 from dotenv import load_dotenv
 
 # Raíz del repo (padre de este paquete backend/) - NO la carpeta backend/
-# misma. El .env vive ahí, junto a Procfile/requirements.txt, no dentro del
+# misma. El .env vive ahí, junto a requirements.txt, no dentro del
 # paquete.
 _CARPETA = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -37,12 +37,13 @@ ODOO_UID = int(_env_obligatoria("ODOO_UID"))
 ODOO_TOKEN = _env_obligatoria("ODOO_TOKEN")
 SECRET_KEY = _env_obligatoria("SECRET_KEY")
 
-# Postgres de Supabase - reemplaza al usuarios.db local que usaba versiones
-# anteriores (SQLite en el disco del backend, que en un host free era
-# efímero y se perdía en cada redeploy). Usar la cadena del "Transaction pooler" de Supabase
-# (puerto 6543), no la de conexión directa - ver README, "Configurar
-# Supabase".
-DATABASE_URL = _env_obligatoria("DATABASE_URL")
+# Supabase, vía su API REST (no conexión directa a Postgres - ver
+# backend/db.py para el porqué). Sacar ambos valores de Supabase:
+# Project Settings → API. SUPABASE_SERVICE_ROLE_KEY (no la "anon") porque
+# bypassea Row Level Security - el mismo nivel de acceso que ya tenía la
+# conexión directa. Nunca sale del backend, así que es seguro.
+SUPABASE_URL = _env_obligatoria("SUPABASE_URL")
+SUPABASE_SERVICE_ROLE_KEY = _env_obligatoria("SUPABASE_SERVICE_ROLE_KEY")
 
 FRONTEND_ORIGINS = [o.strip() for o in os.environ.get("FRONTEND_ORIGINS", "").split(",") if o.strip()]
 TOKEN_LIFETIME_SEGUNDOS = int(os.environ.get("SESSION_LIFETIME_HORAS", 8)) * 3600

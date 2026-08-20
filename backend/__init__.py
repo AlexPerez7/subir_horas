@@ -31,8 +31,10 @@ Variables de entorno esperadas (.env, NUNCA subir a git; ver .env.example):
     SECRET_KEY=<cadena larga y aleatoria, para firmar los tokens>
     SESSION_LIFETIME_HORAS=8   (opcional, default 8 - vigencia del token)
 
-    DATABASE_URL=<cadena de conexión del Transaction pooler de Supabase>
-        (usuarios/auditoría/vínculos de Telegram - ver README, "Configurar Supabase")
+    SUPABASE_URL=<Project URL de Supabase>
+    SUPABASE_SERVICE_ROLE_KEY=<service_role key de Supabase, NO la anon>
+        (usuarios/auditoría/vínculos de Telegram, vía la API REST de
+        Supabase - ver README, "Configurar Supabase")
 
     FRONTEND_ORIGINS=https://tu-usuario.github.io   (lista separada por comas)
 
@@ -52,7 +54,7 @@ Variables de entorno esperadas (.env, NUNCA subir a git; ver .env.example):
 Organización del código (este paquete):
 
     config.py    - variables de entorno y constantes
-    db.py        - Postgres (Supabase): usuarios, auditoría, vínculos de Telegram
+    db.py        - Supabase (vía API REST): usuarios, auditoría, vínculos de Telegram
     auth.py      - token de sesión y bloqueo por intentos fallidos
     odoo_client.py - cliente JSON-RPC de Odoo + caché
     horas.py     - lógica de negocio (días hábiles, resumen, validaciones)
@@ -60,7 +62,8 @@ Organización del código (este paquete):
     routes/      - un blueprint por área de la API
 
 `backend_odoo.py`, en la raíz del repo, es sólo el punto de entrada que
-usa gunicorn (`Procfile`): crea la app acá y la expone como `app`.
+usa gunicorn (ver `deploy/subir-horas.service`): crea la app acá y la
+expone como `app`.
 """
 
 from flask import Flask, g, jsonify, request
