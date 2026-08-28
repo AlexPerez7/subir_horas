@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=20260828c">
+<link rel="stylesheet" href="css/style.css?v=20260828d">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="favicon.ico" sizes="any">
 <link rel="icon" href="icons/icon-32.png" type="image/png" sizes="32x32">
@@ -140,27 +140,6 @@
 
       <label for="subtarea">Subtarea</label>
       <select id="subtarea" disabled><option>Selecciona una tarjeta primero</option></select>
-
-      <div class="crono-widget" id="cronometroBox">
-        <div class="crono-left">
-          <div class="crono-icon-wrap" id="cronoIconWrap">⏱️</div>
-          <div class="crono-text">
-            <div class="crono-digital" id="cronometroTiempo">00:00:00</div>
-            <div class="crono-sub" id="cronometroHoras">0.00h acumuladas</div>
-          </div>
-        </div>
-        <div class="crono-actions">
-          <button type="button" class="crono-btn crono-btn-play" id="btnCronoIniciar" onclick="alternarCronometro()">
-            <span id="cronoPlayIcon">▶</span> <span id="cronoPlayText">Iniciar</span>
-          </button>
-          <button type="button" class="crono-btn crono-btn-stop" id="btnCronoDetener" onclick="detenerCronometro()" style="display:none;">
-            <span>⏹ Cargar</span>
-          </button>
-          <button type="button" class="crono-btn-reset" id="btnCronoReset" onclick="reiniciarCronometro()" style="display:none;" title="Descartar tiempo">
-            ✕
-          </button>
-        </div>
-      </div>
 
       <button type="button" class="ghost" style="margin-top:10px;" onclick="repetirUltimoRegistro(this)">↻ Repetir último registro</button>
 
@@ -382,6 +361,6 @@
 
 <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="true"></div>
 
-<script src="js/app.js?v=20260828c"></script>
+<script src="js/app.js?v=20260828d"></script>
 </body>
 </html>

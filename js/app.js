@@ -175,7 +175,6 @@ async function inicializar(){
   await Promise.allSettled(cargasIniciales);
   restaurarBorrador();
   inicializarAtajosTeclado();
-  iniciarCronometroLoop();
   alCambiarFechaRegistro();
 }
 
@@ -1152,125 +1151,8 @@ function inicializarAtajosTeclado(){
 }
 
 /* ==========================================================================
-   Cronómetro y Horas del Día
+   Horas del Día Seleccionado
    ========================================================================== */
-
-const CRONO_INICIO_KEY = 'registro_horas_crono_inicio';
-const CRONO_PAUSADO_KEY = 'registro_horas_crono_pausado';
-const CRONO_ESTADO_KEY = 'registro_horas_crono_estado';
-
-let _cronoInterval = null;
-
-function pad2(n){ return String(n).padStart(2, '0'); }
-
-function formatoTiempo(segundosTotales){
-  const h = Math.floor(segundosTotales / 3600);
-  const m = Math.floor((segundosTotales % 3600) / 60);
-  const s = Math.floor(segundosTotales % 60);
-  return pad2(h) + ':' + pad2(m) + ':' + pad2(s);
-}
-
-function actualizarDisplayCronometro(){
-  const estado = localStorage.getItem(CRONO_ESTADO_KEY) || 'detenido';
-  const inicio = parseInt(localStorage.getItem(CRONO_INICIO_KEY) || '0', 10);
-  const pausadoMs = parseInt(localStorage.getItem(CRONO_PAUSADO_KEY) || '0', 10);
-
-  const box = document.getElementById('cronometroBox');
-  const tiempoEl = document.getElementById('cronometroTiempo');
-  const horasEl = document.getElementById('cronometroHoras');
-  const btnIniciar = document.getElementById('btnCronoIniciar');
-  const btnDetener = document.getElementById('btnCronoDetener');
-  const btnReset = document.getElementById('btnCronoReset');
-
-  if(!box || !tiempoEl) return;
-
-  let transcurridoMs = 0;
-  if(estado === 'corriendo' && inicio > 0){
-    transcurridoMs = Date.now() - inicio + pausadoMs;
-    box.classList.add('corriendo');
-    if(btnIniciar) btnIniciar.innerHTML = '<span id="cronoPlayIcon">⏸</span> <span id="cronoPlayText">Pausar</span>';
-    if(btnDetener) btnDetener.style.display = '';
-    if(btnReset) btnReset.style.display = '';
-  } else if(estado === 'pausado'){
-    transcurridoMs = pausadoMs;
-    box.classList.remove('corriendo');
-    if(btnIniciar) btnIniciar.innerHTML = '<span id="cronoPlayIcon">▶</span> <span id="cronoPlayText">Reanudar</span>';
-    if(btnDetener) btnDetener.style.display = '';
-    if(btnReset) btnReset.style.display = '';
-  } else {
-    transcurridoMs = 0;
-    box.classList.remove('corriendo');
-    if(btnIniciar) btnIniciar.innerHTML = '<span id="cronoPlayIcon">▶</span> <span id="cronoPlayText">Iniciar</span>';
-    if(btnDetener) btnDetener.style.display = 'none';
-    if(btnReset) btnReset.style.display = 'none';
-  }
-
-  const segundos = Math.floor(transcurridoMs / 1000);
-  tiempoEl.textContent = formatoTiempo(segundos);
-  const decimalHoras = (segundos / 3600).toFixed(2);
-  if(horasEl) horasEl.textContent = decimalHoras + 'h acumuladas';
-}
-
-function iniciarCronometroLoop(){
-  if(_cronoInterval) clearInterval(_cronoInterval);
-  _cronoInterval = setInterval(actualizarDisplayCronometro, 1000);
-  actualizarDisplayCronometro();
-}
-
-function alternarCronometro(){
-  const estado = localStorage.getItem(CRONO_ESTADO_KEY) || 'detenido';
-  if(estado === 'corriendo'){
-    const inicio = parseInt(localStorage.getItem(CRONO_INICIO_KEY) || '0', 10);
-    const prevPausado = parseInt(localStorage.getItem(CRONO_PAUSADO_KEY) || '0', 10);
-    const acumulado = Date.now() - inicio + prevPausado;
-    localStorage.setItem(CRONO_ESTADO_KEY, 'pausado');
-    localStorage.setItem(CRONO_PAUSADO_KEY, String(acumulado));
-    localStorage.removeItem(CRONO_INICIO_KEY);
-    mostrarToast('⏱️ Cronómetro pausado.', 'info');
-  } else if(estado === 'pausado'){
-    localStorage.setItem(CRONO_ESTADO_KEY, 'corriendo');
-    localStorage.setItem(CRONO_INICIO_KEY, String(Date.now()));
-  } else {
-    localStorage.setItem(CRONO_ESTADO_KEY, 'corriendo');
-    localStorage.setItem(CRONO_INICIO_KEY, String(Date.now()));
-    localStorage.setItem(CRONO_PAUSADO_KEY, '0');
-    mostrarToast('⏱️ Cronómetro iniciado.', 'info');
-  }
-  actualizarDisplayCronometro();
-}
-
-function detenerCronometro(){
-  const estado = localStorage.getItem(CRONO_ESTADO_KEY) || 'detenido';
-  let transcurridoMs = 0;
-  if(estado === 'corriendo'){
-    const inicio = parseInt(localStorage.getItem(CRONO_INICIO_KEY) || '0', 10);
-    const prevPausado = parseInt(localStorage.getItem(CRONO_PAUSADO_KEY) || '0', 10);
-    transcurridoMs = Date.now() - inicio + prevPausado;
-  } else if(estado === 'pausado'){
-    transcurridoMs = parseInt(localStorage.getItem(CRONO_PAUSADO_KEY) || '0', 10);
-  }
-
-  reiniciarCronometro(false);
-
-  const horasExactas = transcurridoMs / (1000 * 3600);
-  let horasFinales = Math.round(horasExactas * 4) / 4;
-  if(horasFinales <= 0 && transcurridoMs > 60000) horasFinales = 0.25;
-
-  if(horasFinales > 0){
-    document.getElementById('horas').value = horasFinales;
-    guardarBorrador();
-    alCambiarHorasRegistro();
-    mostrarToast('⏱️ ' + horasFinales + 'h cargadas en el formulario.', 'ok');
-  }
-}
-
-function reiniciarCronometro(notificar = true){
-  localStorage.removeItem(CRONO_ESTADO_KEY);
-  localStorage.removeItem(CRONO_INICIO_KEY);
-  localStorage.removeItem(CRONO_PAUSADO_KEY);
-  actualizarDisplayCronometro();
-  if(notificar) mostrarToast('⏱️ Cronómetro descartado.', 'info');
-}
 
 let _timeoutHorasDia = null;
 
