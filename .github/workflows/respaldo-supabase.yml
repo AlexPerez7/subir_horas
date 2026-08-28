@@ -1,7 +1,7 @@
 name: Respaldo semanal de Supabase
 
-# Exporta las tablas auditoria y telegram_links (vía la API REST de
-# Supabase) y las sube como artifact de GitHub Actions - red de
+# Exporta la tabla auditoria (vía la API REST de
+# Supabase) y la sube como artifact de GitHub Actions - red de
 # seguridad extra además de los backups propios de Supabase (retención
 # limitada en el free tier). No reemplaza point-in-time recovery real,
 # pero cubre el escenario "se rompió/vació la base por error" con algo
@@ -16,8 +16,7 @@ name: Respaldo semanal de Supabase
 # lado.
 #
 # Requiere los secrets SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY
-# cargados en Settings → Secrets and variables → Actions (los mismos
-# valores del .env de la VM).
+# cargados en Settings → Secrets and variables → Actions.
 
 on:
   schedule:
@@ -30,7 +29,7 @@ jobs:
     steps:
       - name: Exportar tablas desde Supabase
         run: |
-          for TABLA in auditoria telegram_links; do
+          for TABLA in auditoria; do
             curl -fsS "${{ secrets.SUPABASE_URL }}/rest/v1/$TABLA?select=*" \
               -H "apikey: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
               -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
@@ -43,5 +42,4 @@ jobs:
           name: respaldo-supabase-${{ github.run_id }}
           path: |
             auditoria.json
-            telegram_links.json
           retention-days: 90

@@ -150,9 +150,8 @@ def _calcular_resumen(tarjeta):
 
 def _crear_linea_timesheet(task_id, fecha, horas, detalle):
     """Crea la línea en account.analytic.line para una subtarea ya resuelta
-    (por id). Usado tanto por /api/timesheet (que resuelve el id a partir
-    de un nombre de subtarea) como por el bot de Telegram (que ya tiene el
-    id porque lo sacó de un botón)."""
+    (por id). Usado por /api/timesheet (que resuelve el id a partir
+    de un nombre de subtarea)."""
     tarea = odoo_client.odoo_execute_kw("project.task", "read", [[task_id]], {"fields": ["project_id", "name"]})[0]
     employee_id = odoo_client.obtener_employee_de_tarea(task_id)
     return odoo_client.odoo_execute_kw(

@@ -7,9 +7,7 @@ dominios distintos, y varios navegadores (Safari, Brave, Samsung Internet)
 bloquean por defecto las cookies "de terceros" aunque tengan
 SameSite=None; Secure.
 
-También vive acá el bloqueo genérico tras intentos fallidos (usado tanto
-por el login web como por /vincular del bot de Telegram, cada uno con su
-propio diccionario en memoria).
+También vive acá el bloqueo tras intentos fallidos de login (en memoria del proceso).
 """
 
 import time
@@ -45,13 +43,11 @@ def requiere_admin():
 
 
 # Bloqueo simple tras varios intentos fallidos, en memoria del proceso (no
-# en la base de datos): alcanza porque el service de systemd corre un único worker de
+# en la base de datos): alcanza porque el servicio corre un único worker de
 # gunicorn, así que no hace falta coordinar estado entre procesos. Este
 # contador sí se resetea en cada redeploy (a diferencia de los usuarios,
 # que viven en Postgres) - no tiene mayor impacto, vuelve a arrancar en
-# cero. Cada feature que lo usa (login web, bot de Telegram) tiene su
-# propio diccionario y pasa su propia clave (username o chat_id) - estas
-# funciones son genéricas sobre esos dos parámetros.
+# cero.
 INTENTOS_MAXIMOS = 5
 BLOQUEO_SEGUNDOS = 300
 

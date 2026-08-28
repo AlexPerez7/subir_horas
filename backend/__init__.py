@@ -33,32 +33,17 @@ Variables de entorno esperadas (.env, NUNCA subir a git; ver .env.example):
 
     SUPABASE_URL=<Project URL de Supabase>
     SUPABASE_SERVICE_ROLE_KEY=<service_role key de Supabase, NO la anon>
-        (usuarios/auditoría/vínculos de Telegram, vía la API REST de
-        Supabase - ver README, "Configurar Supabase")
+        (usuarios y auditoría, vía la API REST de Supabase)
 
     FRONTEND_ORIGINS=https://tu-usuario.github.io   (lista separada por comas)
-
-    CRON_SECRET=<cadena aleatoria>   (opcional - habilita /api/recordatorio-cron
-        para el recordatorio automático por Telegram; ver README)
-
-    TELEGRAM_BOT_TOKEN=<token de @BotFather>       (opcional - habilita el bot
-    TELEGRAM_WEBHOOK_SECRET=<cadena aleatoria>      interactivo de Telegram;
-                                                     ver README. TELEGRAM_CHAT_ID
-                                                     NO hace falta acá: cada
-                                                     cuenta se vincula con
-                                                     /vincular desde el propio
-                                                     chat - ese secret solo lo
-                                                     usan los workflows de
-                                                     GitHub Actions de cron)
 
 Organización del código (este paquete):
 
     config.py    - variables de entorno y constantes
-    db.py        - Supabase (vía API REST): usuarios, auditoría, vínculos de Telegram
+    db.py        - Supabase (vía API REST): usuarios, auditoría
     auth.py      - token de sesión y bloqueo por intentos fallidos
     odoo_client.py - cliente JSON-RPC de Odoo + caché
     horas.py     - lógica de negocio (días hábiles, resumen, validaciones)
-    telegram_bot.py - bot interactivo de Telegram
     routes/      - un blueprint por área de la API
 
 `backend_odoo.py`, en la raíz del repo, es sólo el punto de entrada que
@@ -71,7 +56,7 @@ from flask_cors import CORS
 
 from . import auth, config, db
 
-RUTAS_PUBLICAS = ("/", "/api/login", "/api/recordatorio-cron", "/api/resumen-semanal-cron", "/api/telegram-webhook")
+RUTAS_PUBLICAS = ("/", "/api/login")
 
 
 def create_app():
@@ -85,12 +70,10 @@ def create_app():
     from .routes.auth_routes import bp as auth_bp
     from .routes.usuarios_routes import bp as usuarios_bp
     from .routes.timesheet_routes import bp as timesheet_bp
-    from .routes.telegram_routes import bp as telegram_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(usuarios_bp)
     app.register_blueprint(timesheet_bp)
-    app.register_blueprint(telegram_bp)
 
     @app.before_request
     def proteger_todo():

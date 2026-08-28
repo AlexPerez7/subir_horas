@@ -1,7 +1,6 @@
 """
 Capa de acceso a datos (Supabase, vía su API REST/PostgREST sobre HTTPS):
-cuentas de la app, auditoría de acciones de administración, y el vínculo
-chat_id de Telegram → cuenta. Sin dependencia de Flask - las rutas pasan
+cuentas de la app y auditoría de acciones de administración. Sin dependencia de Flask - las rutas pasan
 explícitamente lo que necesitan (ej. el actor de una auditoría) en vez de
 que este módulo lea `g` por su cuenta.
 
@@ -32,7 +31,7 @@ _client = create_client(config.SUPABASE_URL, config.SUPABASE_SERVICE_ROLE_KEY)
 def _inicializar_db():
     """No-op a propósito: a diferencia de una conexión Postgres directa,
     la API REST no puede correr CREATE TABLE. Las tablas (usuarios,
-    auditoria, telegram_links) se crean una única vez a mano en el SQL
+    auditoria) se crean una única vez a mano en el SQL
     Editor de Supabase - ver README, "Configurar Supabase"."""
     pass
 
@@ -93,31 +92,6 @@ def eliminar_usuario(username):
 
 def actualizar_password(username, nuevo_hash):
     _client.table("usuarios").update({"password_hash": nuevo_hash}).eq("username", username).execute()
-
-
-def vincular_telegram(chat_id, username):
-    """Asocia un chat_id de Telegram a una cuenta de la app (ver /vincular
-    en el bot). Un chat_id solo puede estar vinculado a un username a la vez
-    - re-vincular pisa el vínculo anterior."""
-    _client.table("telegram_links").upsert({
-        "chat_id": chat_id,
-        "username": username,
-        "linked_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
-    }).execute()
-
-
-def desvincular_telegram(chat_id):
-    res = _client.table("telegram_links").delete().eq("chat_id", chat_id).execute()
-    return len(res.data) > 0
-
-
-def usuario_vinculado(chat_id):
-    """Devuelve el usuario (con su tarjeta) vinculado a este chat_id de
-    Telegram, o None si el chat todavía no hizo /vincular."""
-    res = _client.table("telegram_links").select("username").eq("chat_id", chat_id).execute()
-    if not res.data:
-        return None
-    return obtener_usuario(res.data[0]["username"])
 
 
 def _bootstrap_admin():

@@ -19,7 +19,6 @@ Consiste en un formulario web estático (publicado en **GitHub Pages**) conectad
 - [CI](#ci)
 - [Publicar el frontend en GitHub Pages](#publicar-el-frontend-en-github-pages)
 - [Instalar como app (PWA)](#instalar-como-app-pwa)
-- [Recordatorio y resumen por Telegram](#recordatorio-y-resumen-por-telegram)
 - [Gestión de usuarios](#gestión-de-usuarios)
 - [Flujo de actualización](#flujo-de-actualización)
 - [Estructura del proyecto](#estructura-del-proyecto)
@@ -36,20 +35,19 @@ Consiste en un formulario web estático (publicado en **GitHub Pages**) conectad
 ```
 ┌────────────────┐  HTTPS (fetch,   ┌───────────────┐  127.0.0.1:8000  ┌──────────────────┐   JSON-RPC   ┌──────┐
 │  index.html      │  JSON, token     │  Tailscale      │ ───────────────► │  backend_odoo.py │ ────────────► │ Odoo │
-│  (GitHub Pages)  │ ───────────────► │  Funnel         │                  │  (Flask+gunicorn, │ ◄──────────── │      │
-│                  │ ◄─────────────── │  (*.ts.net)     │ ◄─────────────── │   VM Ubuntu       │                └──────┘
-└────────────────┘                  └───────────────┘                  │   propia)         │
-                                                                          └─────────┬─────────┘
-                                                                                    │
-                                                                           Postgres (Supabase)
-                                                                           login / tarjeta por usuario
+│  (GitHub Pages)  │ ───────────────► │  Funnel /       │                  │  (Flask+gunicorn)│ ◄──────────── │      │
+│                  │ ◄─────────────── │  Render.com     │ ◄─────────────── │                  │                └──────┘
+└────────────────┘                  └───────────────┘                  └─────────┬────────┘
+                                                                                 │
+                                                                        Postgres (Supabase)
+                                                                        login / tarjeta por usuario
 ```
 
 - **`index.html`** — formulario standalone (HTML + CSS + JS, sin frameworks ni build step). Permite elegir tarjeta, subtarea, fecha, horas y descripción; muestra en vivo el historial real de esa subtarea en Odoo. No tiene ningún secreto embebido — solo la URL pública del backend. Se publica tal cual en GitHub Pages.
-- **`backend_odoo.py` + el paquete `backend/`** — API Flask (JSON puro) que hace de intermediaria con Odoo y gestiona el login propio de la app (usuario/contraseña, token de sesión firmado, tabla `usuarios` en Postgres). Nunca se llama a Odoo directo desde el navegador (evita exponer el token de API). Corre como servicio systemd en una VM Ubuntu propia, expuesta a internet vía [Tailscale Funnel](https://tailscale.com/kb/1223/funnel) (sin abrir puertos ni tocar el firewall). Ver [Estructura del proyecto](#estructura-del-proyecto) para cómo está dividido el paquete.
+- **`backend_odoo.py` + el paquete `backend/`** — API Flask (JSON puro) que hace de intermediaria con Odoo y gestiona el login propio de la app (usuario/contraseña, token de sesión firmado, tabla `usuarios` en Postgres). Nunca se llama a Odoo directo desde el navegador (evita exponer el token de API). Corre como servicio en Render.com o en una VM propia. Ver [Estructura del proyecto](#estructura-del-proyecto) para cómo está dividido el paquete.
 - **`scripts/crear_usuario.py`** — CLI para crear cuentas o resetear contraseñas. Se corre desde tu máquina local, apuntando a la misma base de Supabase que usa producción (ver [Gestión de usuarios](#gestión-de-usuarios)).
 
-Como el frontend y el backend viven en dominios distintos (`*.github.io` vs `*.ts.net`), la comunicación es cross-origin. La autenticación **no usa cookies**: muchos navegadores (Safari, Brave, Samsung Internet, y cada vez más) bloquean por defecto las cookies "de terceros" aunque tengan `SameSite=None; Secure`, lo que rompería el login. En cambio, `/api/login` devuelve un token firmado que el frontend guarda en `localStorage` y manda como header `Authorization: Bearer <token>` en cada pedido — no depende de ninguna política de cookies del navegador. El backend restringe CORS al origen exacto del sitio de GitHub Pages.
+Como el frontend y el backend viven en dominios distintos (`*.github.io` vs backend host), la comunicación es cross-origin. La autenticación **no usa cookies**: muchos navegadores (Safari, Brave, Samsung Internet, y cada vez más) bloquean por defecto las cookies "de terceros" aunque tengan `SameSite=None; Secure`, lo que rompería el login. En cambio, `/api/login` devuelve un token firmado que el frontend guarda en `localStorage` y manda como header `Authorization: Bearer <token>` en cada pedido — no depende de ninguna política de cookies del navegador. El backend restringe CORS al origen exacto del sitio de GitHub Pages.
 
 ---
 
@@ -78,18 +76,17 @@ Además de cargar/editar/eliminar horas y ver el historial en vivo:
   ```
 - Acceso a Odoo con un usuario/token que tenga permisos de lectura/escritura sobre `project.task`, `account.analytic.line` y `hr.employee`.
 - Una cuenta de GitHub (para Pages) y una cuenta de Supabase (para la base de datos de usuarios) — ambas gratuitas.
-- Una VM Linux (Ubuntu/Debian) propia, con acceso `sudo`, siempre encendida — es donde corre el backend.
-- Una cuenta de [Tailscale](https://tailscale.com) (plan personal, gratuito) para exponer el backend a internet sin abrir puertos.
+- Un host para el backend (Render.com, VM Linux propia, etc.).
 
 ---
 
 ## Configurar Supabase (base de datos persistente)
 
-Los usuarios de la app (login, auditoría, vínculos de Telegram) se guardan en Postgres, en un proyecto de [Supabase](https://supabase.com) — free tier, con almacenamiento persistente y gestionado, independiente de la VM del backend.
+Los usuarios de la app (login y auditoría) se guardan en Postgres, en un proyecto de [Supabase](https://supabase.com) — free tier, con almacenamiento persistente y gestionado.
 
-El backend le habla a Supabase por su **API REST** (HTTPS/443, paquete `supabase` de Python), no por conexión directa al protocolo de Postgres (puertos 5432/6543) — pensado para redes que solo dejan salir tráfico HTTPS, como suele pasar en redes de oficina. La contra de esto: la API REST no puede crear tablas (no soporta DDL), así que hay un paso manual único de setup que con una conexión directa no hacía falta.
+El backend le habla a Supabase por su **API REST** (HTTPS/443, paquete `supabase` de Python), no por conexión directa al protocolo de Postgres (puertos 5432/6543) — pensado para redes que solo dejan salir tráfico HTTPS.
 
-1. Crea una cuenta en [supabase.com](https://supabase.com) y un proyecto nuevo (elige una contraseña de base de datos y guárdala — no la vas a necesitar para esto, pero sirve como respaldo si en algún momento sí necesitas la conexión directa).
+1. Crea una cuenta en [supabase.com](https://supabase.com) y un proyecto nuevo.
 2. **Crear las tablas (una sola vez):** en el proyecto, ve a **SQL Editor → New query**, pega esto y ejecútalo:
    ```sql
    CREATE TABLE IF NOT EXISTS usuarios (
@@ -105,15 +102,10 @@ El backend le habla a Supabase por su **API REST** (HTTPS/443, paquete `supabase
        accion TEXT NOT NULL,
        detalle TEXT
    );
-   CREATE TABLE IF NOT EXISTS telegram_links (
-       chat_id TEXT PRIMARY KEY,
-       username TEXT NOT NULL,
-       linked_at TEXT NOT NULL
-   );
    ```
    Es seguro volver a correrlo (`IF NOT EXISTS`) — si ya tenías estas tablas de una migración anterior, no hace nada.
-3. **Sacar las credenciales de la API:** **Project Settings → API**. Copia la **Project URL** (`SUPABASE_URL`) y la **`service_role` key** (`SUPABASE_SERVICE_ROLE_KEY`) — **no** la `anon`/`public` key, esa está pensada para exponerse en un frontend y no tiene permisos de escritura sin políticas de Row Level Security adicionales. La `service_role` sí tiene acceso total (equivalente al que ya tenía la conexión directa) y nunca sale del backend, así que es segura.
-4. Esas dos van en tu `.env` local y en el `.env` de la VM (ver [Desplegar el backend en tu propia VM](#desplegar-el-backend-en-tu-propia-vm)).
+3. **Sacar las credenciales de la API:** **Project Settings → API**. Copia la **Project URL** (`SUPABASE_URL`) y la **`service_role` key** (`SUPABASE_SERVICE_ROLE_KEY`) — **no** la `anon`/`public` key.
+4. Esas dos van en tus variables de entorno locales y en las de producción.
 
 ---
 
@@ -284,89 +276,6 @@ Los íconos están en `icons/` (generados una vez, no hace falta regenerarlos sa
 
 ---
 
-## Recordatorio y resumen por Telegram
-
-El banner que aparece dentro de la app ("no cargaste ayer") solo lo ves si la abres. Dos workflows lo complementan de forma proactiva, mandando mensajes por Telegram sin que tengas que abrir el sitio:
-
-- [`.github/workflows/recordatorio-telegram.yml`](.github/workflows/recordatorio-telegram.yml) — todas las mañanas de un día hábil consulta al backend y, si falta cargar el día hábil anterior, manda un aviso.
-- [`.github/workflows/resumen-semanal-telegram.yml`](.github/workflows/resumen-semanal-telegram.yml) — todos los viernes manda un resumen con el total de horas de la semana y el detalle por subtarea (usa `/api/resumen-semanal-cron`, protegido por el mismo `CRON_SECRET`).
-
-Ambos reusan los mismos tres secrets (`CRON_SECRET`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`) — configurando el primero, el segundo ya queda funcionando.
-
-(Antes se probó con un webhook de Microsoft Teams, pero la plantilla de Power Automate falla con "Call made for a thread which is not a ChatThread" cuando el destino es un chat contigo mismo — es una limitación de esa plantilla, no del payload. Telegram evita todo ese problema: es un solo `curl` sin OAuth ni flujos intermedios.)
-
-**1. Generar el secreto del cron**
-
-Igual que `SECRET_KEY`:
-```powershell
-python -c "import secrets; print(secrets.token_hex(32))"
-```
-Cargalo como `CRON_SECRET` en el `.env` de la VM.
-
-**2. Crear el bot de Telegram**
-
-1. En Telegram, busca **@BotFather** y mándale `/newbot`.
-2. Elige un nombre y un username (tiene que terminar en `bot`, ej. `subirhoras_bot`).
-3. Te va a dar un **token** tipo `123456789:AAExxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx` — es el `TELEGRAM_BOT_TOKEN`.
-4. Busca a tu bot recién creado por su username y mándale cualquier mensaje (ej. "hola") — Telegram no deja que un bot te escriba primero, así que este paso es obligatorio.
-5. Con el token, abre en el navegador: `https://api.telegram.org/bot<TOKEN>/getUpdates` (reemplazando `<TOKEN>`). En la respuesta JSON busca `"chat":{"id":...}` — ese número es el `TELEGRAM_CHAT_ID`.
-
-**3. Cargar los secrets en GitHub**
-
-En el repo: **Settings → Secrets and variables → Actions → New repository secret**, y agrega:
-- `CRON_SECRET` — el mismo valor que pusiste en el `.env` de la VM.
-- `TELEGRAM_BOT_TOKEN` — el token que te dio BotFather.
-- `TELEGRAM_CHAT_ID` — el id que sacaste de `getUpdates`.
-
-**4. Probar**
-
-Pestaña **Actions → Recordatorio de horas por Telegram → Run workflow** (y lo mismo para **Resumen semanal de horas por Telegram**). Si los tres secrets están bien cargados, el job debería pasar en verde. Mientras no los cargues, estos workflows van a fallar — es el comportamiento esperado hasta terminar de configurarlos, no un bug.
-
-### Bot interactivo: preguntarle cosas al bot (y cargar horas)
-
-Además de los avisos automáticos, le puedes escribir directo al bot en Telegram. Esto es distinto de los workflows de arriba: en vez de un job periódico que empuja un mensaje, es un **webhook** — Telegram le pega un `POST` a tu backend cada vez que le escribes (o tocas un botón), y el backend responde en el momento (`POST /api/telegram-webhook`, ver [`backend/routes/telegram_routes.py`](backend/routes/telegram_routes.py) y [`backend/telegram_bot.py`](backend/telegram_bot.py)).
-
-Entiende:
-- `/vincular <usuario> <contraseña>` → asocia ese chat de Telegram a tu cuenta de la app (las mismas credenciales del login web). Hace falta hacerlo una sola vez por chat antes de poder usar el resto de los comandos.
-- `/resumen` o **"resumen de esta semana"** → total de horas de la semana y el mes, con el detalle por subtarea.
-- `/faltantes` o **"¿qué días no he subido horas?"** → días hábiles sin cargar de los últimos 10, cada uno con un botón para arrancar la carga de ese día.
-- **"2h hoy: reunión con cliente"** → registra horas directo desde el chat. El bot entiende `hoy`, `ayer` o una fecha `dd/mm`, y la cantidad de horas (`2h`, `1,5 horas`); como Telegram no tiene forma de mandar un desplegable, la subtarea se elige tocando uno de los botones que te ofrece después.
-- `/desvincular` → olvida el vínculo de ese chat (por si vas a re-vincularlo a otra cuenta, o dejas de usar el bot).
-
-El bot es **multiusuario**: cualquier cuenta de la app puede vincular su propio chat de Telegram con `/vincular` y usar el bot para su propia tarjeta — no hace falta ser el admin. Un chat sin vincular solo puede usar `/vincular`; para cualquier otro mensaje, el bot pide que te vincules primero. `/vincular` está protegido contra fuerza bruta igual que el login web (se bloquea 5 minutos tras 5 intentos fallidos desde el mismo chat).
-
-**1. Variables de entorno en el `.env` de la VM**
-
-Además de `CRON_SECRET`, carga en el `.env` de la VM (no en GitHub — estas las usa el backend, no un workflow):
-- `TELEGRAM_BOT_TOKEN` — el mismo token de BotFather.
-- `TELEGRAM_WEBHOOK_SECRET` — una cadena aleatoria nueva (generarla igual que `SECRET_KEY`). Es el mecanismo con el que el backend verifica que el `POST` realmente viene de Telegram y no de cualquiera que le pegue a la URL.
-
-(No hace falta `TELEGRAM_CHAT_ID` acá — esa variable la sigue necesitando, aparte, el paso 3 de más arriba, "Cargar los secrets en GitHub", para los workflows de recordatorio/resumen semanal.)
-
-**2. Registrar el webhook en Telegram (una sola vez)**
-
-Con tu token real y la URL de Tailscale Funnel de tu backend:
-```powershell
-curl -X POST "https://api.telegram.org/bot<TOKEN>/setWebhook" `
-  -d url="https://tu-maquina.tu-tailnet.ts.net/api/telegram-webhook" `
-  -d secret_token="<TELEGRAM_WEBHOOK_SECRET>"
-```
-Debería responder `{"ok":true,"result":true,...}`. A partir de ahí, cualquier mensaje que le mandes al bot (o botón que toques) dispara el webhook automáticamente — no hace falta volver a correr esto salvo que cambies de URL o quieras rotar el secreto.
-
-**3. Registrar los comandos en Telegram (opcional, una sola vez)**
-
-Para que `/vincular`, `/resumen`, `/faltantes` y `/ayuda` aparezcan en el menú "/" del chat en vez de tener que acordarte de tipearlos:
-```powershell
-curl -X POST "https://api.telegram.org/bot<TOKEN>/setMyCommands" `
-  -d "commands=[{\"command\":\"vincular\",\"description\":\"Vincular este chat a tu cuenta\"},{\"command\":\"resumen\",\"description\":\"Horas de esta semana y este mes\"},{\"command\":\"faltantes\",\"description\":\"Días hábiles sin cargar\"},{\"command\":\"registrar\",\"description\":\"Cómo cargar horas por chat\"},{\"command\":\"ayuda\",\"description\":\"Qué puede hacer el bot\"},{\"command\":\"desvincular\",\"description\":\"Olvidar el vínculo de este chat\"}]"
-```
-
-**4. Probar**
-
-Escríbele al bot `/vincular tu-usuario tu-contraseña` (las mismas credenciales del login web) y después "resumen" o "¿qué días no he subido horas?" desde Telegram. Como el backend corre siempre encendido en la VM, no debería haber demora de arranque en frío — si tarda, revisa `sudo systemctl status subir-horas` y `sudo tailscale funnel status` en la VM.
-
----
-
 ## Gestión de usuarios
 
 **No hay registro abierto a propósito**: cualquiera con el link de GitHub Pages podría crearse una cuenta y elegir a qué tarjeta de Odoo cargarle horas si el alta fuera pública. En cambio, hay un panel de administración dentro de la propia app.
@@ -409,8 +318,8 @@ python scripts/crear_usuario.py <username> --reset-password
 | Qué cambiaste | Qué hacer |
 |---|---|
 | `index.html` (diseño, JS, comportamiento del formulario) | Commit + push a `main`. GitHub Pages lo redespliega solo en un minuto o dos. |
-| `backend/` (endpoints, lógica de Odoo, auth, bot de Telegram) | Commit + push a `main`: si configuraste el [runner self-hosted](#deploy-automático), se actualiza y reinicia solo. Si no, hacerlo a mano en la VM: `git pull && sudo systemctl restart subir-horas`. Los usuarios viven en Supabase, no en el disco de la VM, así que un reinicio del servicio no los borra. |
-| `.env` / variables de entorno del backend | Se editan directo en la VM (`nano .env`) y después `sudo systemctl restart subir-horas`. No requiere tocar el repo. |
+| `backend/` (endpoints, lógica de Odoo, auth) | Commit + push a `main`: se actualiza automáticamente si usas Render.com (o vía `git pull` en VM). Los usuarios viven en Supabase, así que un reinicio del servicio no los borra. |
+| `.env` / variables de entorno del backend | Se editan en el panel del hosting (ej. Render.com Environment Variables) o en la VM. No requiere tocar el repo. |
 
 ### Subir cambios a GitHub (con GitHub Desktop)
 
@@ -440,22 +349,19 @@ subir_horas/
 ├── favicon.ico
 ├── .github/
 │   └── workflows/
-│       ├── recordatorio-telegram.yml    # avisa por Telegram si falta cargar horas
-│       ├── resumen-semanal-telegram.yml # resumen semanal por Telegram (todos los viernes)
-│       ├── respaldo-supabase.yml        # backup semanal de auditoria/telegram_links
+│       ├── respaldo-supabase.yml        # backup semanal de auditoria
 │       ├── ci.yml                       # chequeo de sintaxis Python/JS en cada push/PR
-│       └── deploy.yml                   # deploy automático a la VM (runner self-hosted)
+│       └── deploy.yml                   # deploy automático a VM (opcional)
 ├── deploy/
-│   └── subir-horas.service # unit de systemd para correr el backend en la VM
+│   └── subir-horas.service # unit de systemd para correr el backend en VM
 ├── backend_odoo.py        # punto de entrada para gunicorn - solo crea la app
-├── backend/                # paquete con toda la lógica del backend (se despliega en la VM)
+├── backend/                # paquete con toda la lógica del backend
 │   ├── __init__.py          # create_app(): registra rutas y el guard de autenticación
 │   ├── config.py             # variables de entorno y constantes
-│   ├── db.py                 # Postgres (Supabase): usuarios, auditoría, vínculos de Telegram
+│   ├── db.py                 # Postgres (Supabase): usuarios y auditoría
 │   ├── auth.py                # token de sesión y bloqueo por intentos fallidos
 │   ├── odoo_client.py          # cliente JSON-RPC de Odoo + caché
 │   ├── horas.py                # días hábiles, validaciones, resumen/recordatorio
-│   ├── telegram_bot.py          # bot interactivo de Telegram
 │   └── routes/                 # un blueprint por área de la API
 ├── scripts/
 │   └── crear_usuario.py    # CLI para crear/resetear usuarios
@@ -467,24 +373,22 @@ subir_horas/
 └── __pycache__/           # (ignorado)
 ```
 
-Los usuarios ya no viven en un archivo local (`usuarios.db` de versiones anteriores) sino en Postgres, en Supabase — no hay ningún archivo de datos que gitignorar ni que se pierda al reiniciar el servicio.
+Los usuarios ya no viven en un archivo local sino en Postgres, en Supabase — no hay ningún archivo de datos que gitignorar ni que se pierda al reiniciar el servicio.
 
-`index.html` queda en la raíz porque GitHub Pages sirve ese nombre por convención en la raíz del sitio; `css/` y `js/` se referencian con rutas relativas (`css/style.css`, `js/app.js`), así que si en algún momento se sirve desde una subcarpeta hay que revisar esas rutas. `backend_odoo.py` queda como un archivo mínimo en la raíz (`from backend import create_app; app = create_app()`) para que el `ExecStart` del servicio de systemd (`gunicorn backend_odoo:app`, ver [`deploy/subir-horas.service`](deploy/subir-horas.service)) no necesite tocarse - toda la lógica real vive en el paquete `backend/`.
+`index.html` queda en la raíz porque GitHub Pages sirve ese nombre por convención en la raíz del sitio; `css/` y `js/` se referencian con rutas relativas (`css/style.css`, `js/app.js`). `backend_odoo.py` queda como un archivo mínimo en la raíz (`from backend import create_app; app = create_app()`) para que el comando de gunicorn (`gunicorn backend_odoo:app`) funcione limpiamente.
 
 ---
 
 ## Seguridad
 
-- El `.env` contiene un token de API real con permisos de escritura sobre Odoo, y la `SUPABASE_SERVICE_ROLE_KEY` (acceso total a la base, bypassea Row Level Security). **Nunca** se commitea, ni se comparte por chat/capturas de pantalla sin tapar esos valores. Lo mismo aplica al `.env` que vive en la VM.
-- Al exponer el backend con Tailscale Funnel, el puerto de gunicorn (`127.0.0.1:8000`) nunca queda abierto a la red local ni a internet directamente — solo Tailscale, corriendo en la misma VM, puede hablarle. La única superficie pública es la URL `https://*.ts.net`, con TLS gestionado por Tailscale.
-- Si el token de Odoo llegara a exponerse accidentalmente (capturas, commit erróneo, etc.), hay que **rotarlo** en Odoo lo antes posible. Si se expone `SUPABASE_SERVICE_ROLE_KEY`, regenerala desde el dashboard de Supabase (**Project Settings → API → Reset service_role key**).
+- El `.env` contiene un token de API real con permisos de escritura sobre Odoo, y la `SUPABASE_SERVICE_ROLE_KEY` (acceso total a la base, bypassea Row Level Security). **Nunca** se commitea, ni se comparte por chat/capturas de pantalla sin tapar esos valores.
+- Si el token de Odoo llegara a exponerse accidentalmente, hay que **rotarlo** en Odoo lo antes posible. Si se expone `SUPABASE_SERVICE_ROLE_KEY`, regenerala desde el dashboard de Supabase (**Project Settings → API → Reset service_role key**).
 - Las contraseñas de los usuarios de la app se guardan **hasheadas** (`werkzeug.security`), nunca en texto plano, en la tabla `usuarios` de Postgres.
 - CORS en el backend está restringido a los orígenes listados en `FRONTEND_ORIGINS` (no `CORS(app)` abierto). Si en algún momento agregas otro dominio desde el que se sirva el frontend, hay que sumarlo ahí.
-- El webhook del bot de Telegram (`POST /api/telegram-webhook`) valida el header `X-Telegram-Bot-Api-Secret-Token` contra `TELEGRAM_WEBHOOK_SECRET`, y además cada chat tiene que vincularse a una cuenta con `/vincular <usuario> <contraseña>` (protegido contra fuerza bruta igual que el login web) antes de poder ver horas o cargarlas — sin vincular, el bot solo responde pidiendo que te vincules. A diferencia del esquema anterior (un único `TELEGRAM_CHAT_ID` fijo, que ignoraba en silencio cualquier otro chat), el bot ahora es descubrible por cualquiera que encuentre su username, así que la única barrera es la contraseña de cada cuenta — no hace falta el username del bot para ser privado, hace falta la contraseña.
-- El login se bloquea 5 minutos para un usuario tras 5 intentos fallidos seguidos (mitiga fuerza bruta básica). El contador vive en memoria del proceso — se resetea en cada reinicio del servicio, y solo funciona porque el service de systemd corre un único worker de gunicorn (si en algún momento se agregan más workers, este esquema necesitaría un store compartido tipo Redis).
-- El login usa un **token firmado** (`itsdangerous`, con `SECRET_KEY`), no una cookie — se eligió así porque las cookies cross-site (`SameSite=None; Secure`) quedan bloqueadas por defecto en varios navegadores (Safari, Brave, Samsung Internet). El token vive en `localStorage` del navegador y viaja en el header `Authorization`. Expira solo a las `SESSION_LIFETIME_HORAS` de haberse emitido (no hay forma de invalidarlo antes de tiempo del lado del servidor — es la contra de no guardar estado de sesión; "cerrar sesión" simplemente lo borra del navegador). Si se filtra un token, expira solo; si hace falta invalidar algo antes, hay que rotar `SECRET_KEY` (invalida *todos* los tokens activos, no solo uno).
-- El sitio publicado en GitHub Pages es **público en internet** aunque el repositorio sea privado (ver nota en [Publicar el frontend](#publicar-el-frontend-en-github-pages)). El login es lo único que protege el acceso a los datos de horas.
-- El empleado de cada línea de horas se resuelve automáticamente según quién está **asignado a la subtarea** (`project.task.user_ids`), no según qué usuario de la app hizo el request. Esto permite, técnicamente, cargar horas "a nombre de" cualquier persona con tarjeta en el proyecto si eres admin — usar esa capacidad con criterio.
+- El login se bloquea 5 minutos para un usuario tras 5 intentos fallidos seguidos (mitiga fuerza bruta básica). El contador vive en memoria del proceso.
+- El login usa un **token firmado** (`itsdangerous`, con `SECRET_KEY`), no una cookie — se eligió así porque las cookies cross-site (`SameSite=None; Secure`) quedan bloqueadas por defecto en varios navegadores (Safari, Brave, Samsung Internet). El token vive en `localStorage` del navegador y viaja en el header `Authorization`. Expira solo a las `SESSION_LIFETIME_HORAS` de haberse emitido.
+- El sitio publicado en GitHub Pages es **público en internet** aunque el repositorio sea privado. El login es lo único que protege el acceso a los datos de horas.
+- El empleado de cada línea de horas se resuelve automáticamente según quién está **asignado a la subtarea** (`project.task.user_ids`), no según qué usuario de la app hizo el request.
 
 ---
 
@@ -493,45 +397,34 @@ Los usuarios ya no viven en un archivo local (`usuarios.db` de versiones anterio
 Por si en unos meses hay que recordar el "por qué":
 
 - **JSON-RPC, no XML-RPC**: el `ODOO_URL` de esta instancia de Assertiva ya apunta al endpoint `/jsonrpc`, así que el backend usa `requests` con el formato JSON-RPC 2.0 de Odoo (`service: "object"`, `method: "execute_kw"`) en vez de `xmlrpc.client`.
-- **`ODOO_UID` fijo en vez de `authenticate()`**: se usa un UID ya resuelto (patrón heredado de un proyecto interno similar), evitando una llamada extra de autenticación en cada request.
-- **Empleado resuelto por tarea, no por sesión**: inicialmente se intentó resolver el campo Empleado a partir del usuario autenticado en la API. Es incorrecto — Odoo lo determina según quién está asignado a la subtarea específica (`user_ids` de `project.task`), independientemente de qué credencial hizo la llamada API.
+- **`ODOO_UID` fijo en vez de `authenticate()`**: se usa un UID ya resuelto, evitando una llamada extra de autenticación en cada request.
+- **Empleado resuelto por tarea, no por sesión**: Odoo lo determina según quién está asignado a la subtarea específica (`user_ids` de `project.task`), independientemente de qué credencial hizo la llamada API.
 - **Filtro por tarjeta padre (`parent_id.name`) al buscar subtareas**: nombres de subtareas como "Carga de Horas" se repiten en las tarjetas de distintas personas dentro del mismo proyecto. Sin este filtro, la búsqueda podía devolver la subtarea de otra persona y cargar las horas en el lugar equivocado.
-- **Login propio en vez de credenciales de Odoo**: cada usuario de la app tiene su cuenta (usuario/contraseña + tarjeta asignada) en Postgres, separada de cualquier login de Odoo. Así no hace falta darle a cada persona un usuario de Odoo solo para cargar horas.
-- **Backend y frontend separados (VM propia + GitHub Pages) en vez de un solo proceso**: GitHub Pages no puede correr Flask; se necesitaba un servicio aparte para la lógica con estado (usuarios, base de datos) y el secreto de Odoo. Esto obligó a que el login pase de páginas server-rendered a una API JSON pura, con CORS restringido por origen.
-- **Postgres en Supabase en vez de SQLite local**: la primera versión guardaba los usuarios en un archivo SQLite en el disco del backend (entonces en Render). Funcionaba, hasta que un redeploy (disco efímero en el plan free de ese host) borró esa base y con ella una cuenta real de un compañero — de ahí la migración a una base gestionada con almacenamiento persistente de verdad. El backend después se migró de Render a una VM propia con Tailscale Funnel, pero esta decisión (Postgres externo) es independiente del host y se mantiene igual.
-- **VM propia con Tailscale Funnel en vez de un PaaS (Render/Koyeb/Fly.io/Railway)**: para este proyecto, todas las alternativas de PaaS con free tier real fueron desapareciendo con el tiempo (Koyeb pasó a ser pago tras ser adquirida por Mistral AI en 2026; Fly.io y Railway nunca ofrecieron uno permanente sin tarjeta). Como ya había una VM Linux propia siempre encendida disponible, resultó más simple y sin costo correr el backend ahí como servicio systemd y exponerlo con Tailscale Funnel (túnel saliente, sin abrir puertos) en vez de pagar un host administrado.
-- **Token en `localStorage` en vez de cookie de sesión**: el primer intento usó la cookie de sesión de Flask con `SameSite=None; Secure`. Funcionaba en pruebas con curl y en Chrome de escritorio, pero fallaba silenciosamente en Samsung Internet (y falla igual en Safari/Brave) porque esos navegadores bloquean cookies cross-site por política propia, sin importar los atributos de la cookie. Se cambió a un token firmado (`itsdangerous`) devuelto en el JSON del login, guardado en `localStorage` y mandado como header `Authorization: Bearer` — no depende de ninguna política de cookies.
-- **Sin app de escritorio**: la versión anterior se distribuía como `.exe` (pywebview + PyInstaller). Se descartó en favor de un sitio web accesible desde cualquier navegador, sin instalar nada.
-- **gunicorn con `--worker-class gthread --threads 4` en vez de un solo worker sync**: el frontend dispara varios pedidos en paralelo al cargar la página (resumen, subtareas, historial, heatmap, etc.), y cada uno espera su propia respuesta de Odoo por red. Con el worker `sync` por default (1 pedido a la vez), esos pedidos se encolaban y se atendían de a uno, sumando la espera de todos en vez de superponerla. Se eligió threads (no más *procesos* `--workers`) para no romper el supuesto de "un solo proceso" del que dependen los diccionarios en memoria de `auth.py` (bloqueo de login) y `odoo_client.py` (caché) — con threads siguen viviendo en el mismo proceso. Es I/O-bound (esperando red, no CPU), así que los threads sí ayudan pese al GIL: se libera mientras el proceso espera la respuesta de `requests`.
-- **`requests.Session()` compartida en `odoo_client.py` en vez de `requests.post` suelto**: reusa la conexión TCP/TLS a Odoo entre llamadas de la misma carga de página (varias funciones de `horas.py` hacen 2-3 llamadas JSON-RPC seguidas) en vez de rehacer el handshake completo en cada una.
+- **Login propio en vez de credenciales de Odoo**: cada usuario de la app tiene su cuenta (usuario/contraseña + tarjeta asignada) en Postgres, separada de cualquier login de Odoo.
+- **Backend y frontend separados**: GitHub Pages no puede correr Flask; se necesitaba un servicio aparte para la lógica con estado (usuarios, base de datos) y el secreto de Odoo.
+- **Postgres en Supabase en vez de SQLite local**: garantiza almacenamiento persistente e independiente de los reinicios y despliegues del backend.
+- **Token en `localStorage` en vez de cookie de sesión**: evita bloqueos de cookies cross-site en Safari, Brave y Samsung Internet.
+- **`requests.Session()` compartida en `odoo_client.py`**: reusa la conexión TCP/TLS a Odoo entre llamadas para mejorar el rendimiento.
 
 ---
 
 ## Monitoreo
 
-A diferencia de un PaaS administrado, acá nadie te avisa solo si la VM se cae, el Funnel se rompe, o el servicio queda colgado — hay que ponerlo a propósito. Recomendado: [UptimeRobot](https://uptimerobot.com) (free tier alcanza de sobra), un monitor HTTP pegándole a `https://tu-maquina.tu-tailnet.ts.net/` cada 5 minutos, con alerta por Telegram o email si deja de responder. Setup en su dashboard, no requiere tocar este repo.
+Recomendado: [UptimeRobot](https://uptimerobot.com) (free tier alcanza de sobra), un monitor HTTP pegándole a tu backend (ej. `https://tu-app.onrender.com/`) cada 10 minutos para mantenerlo despierto y alertar por email si deja de responder.
 
 ---
 
 ## Recuperación ante desastres
 
-Qué hacer si la VM se pierde por completo (falla de hardware, se borra por error, etc.). No debería pasar seguido, pero conviene tener el camino escrito de antes en vez de improvisarlo en el momento.
+**Lo que no se pierde:** los datos (usuarios y auditoría) viven en Supabase, totalmente independiente del host del backend.
 
-**Lo que no se pierde:** los datos (usuarios, auditoría, vínculos de Telegram) viven en Supabase, totalmente independiente de la VM — no hay nada que restaurar ahí. Lo único que hay que rehacer es la infraestructura del backend.
-
-**Respaldo adicional de Supabase:** el workflow [`.github/workflows/respaldo-supabase.yml`](.github/workflows/respaldo-supabase.yml) exporta `auditoria` y `telegram_links` como artifact de GitHub Actions todos los lunes — una red extra además de los backups propios de Supabase. Requiere los secrets `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` cargados en GitHub (los mismos valores del `.env` de la VM). La tabla `usuarios` (tiene `password_hash`) queda afuera de ese workflow a propósito — este repo es público, y esos hashes no deberían quedar en un artifact descargable por cualquiera. Para respaldarla, corré esto en tu máquina local (con `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` en tu `.env`, no sube nada a ningún lado):
+**Respaldo adicional de Supabase:** el workflow [`.github/workflows/respaldo-supabase.yml`](.github/workflows/respaldo-supabase.yml) exporta `auditoria` como artifact de GitHub Actions todos los lunes. La tabla `usuarios` (tiene `password_hash`) queda afuera de ese workflow a propósito. Para respaldarla manualmente:
 ```bash
 curl -fsS "$SUPABASE_URL/rest/v1/usuarios?select=*" \
   -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
   -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
   -o usuarios-backup-$(date +%Y%m%d).json
 ```
-
-1. Levanta una VM Ubuntu/Debian nueva (o reinstala la existente) y sigue [Desplegar el backend en tu propia VM](#desplegar-el-backend-en-tu-propia-vm) de punta a punta: clonar el repo, venv, `.env`, systemd, Tailscale.
-   - Los valores del `.env` (`ODOO_TOKEN`, `SUPABASE_SERVICE_ROLE_KEY`, etc.) hay que sacarlos de donde los tengas guardados aparte (gestor de contraseñas, el `.env` de tu máquina local si está actualizado) — no viven en ningún otro lado recuperable automáticamente. `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` siempre se pueden volver a sacar del dashboard de Supabase (**Project Settings → API**) aunque se pierdan.
-   - `SECRET_KEY` puede ser una nueva sin problema — invalida las sesiones activas (todos tienen que volver a loguearse), pero no hay ningún otro dato atado a ese valor.
-2. **Antes** de correr `tailscale up` en la VM nueva: si la VM vieja seguía registrada en tu tailnet (aparece como "offline" en el [admin console de Tailscale](https://login.tailscale.com/admin/machines)), elimínala de ahí. Si no, la VM nueva puede terminar con un nombre de máquina distinto (`asistente-vmware-1` en vez de `asistente-vmware`) y la URL del Funnel cambia sin que lo esperes.
-3. Con la URL de Funnel confirmada (la misma de antes, o una nueva), repite el corte: `API_BASE` en `js/app.js`, las URLs en `recordatorio-telegram.yml`/`resumen-semanal-telegram.yml`, y vuelve a registrar el webhook de Telegram (ver [Registrar el webhook en Telegram](#recordatorio-y-resumen-por-telegram)) — exactamente los mismos pasos que la migración original de Render a esta VM.
 
 ---
 

@@ -47,10 +47,6 @@ SUPABASE_SERVICE_ROLE_KEY = _env_obligatoria("SUPABASE_SERVICE_ROLE_KEY")
 
 FRONTEND_ORIGINS = [o.strip() for o in os.environ.get("FRONTEND_ORIGINS", "").split(",") if o.strip()]
 TOKEN_LIFETIME_SEGUNDOS = int(os.environ.get("SESSION_LIFETIME_HORAS", 8)) * 3600
-CRON_SECRET = os.environ.get("CRON_SECRET", "")
-
-TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_WEBHOOK_SECRET = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "")
 
 # Ver _bootstrap_admin() en db.py: crea este admin al arrancar si todavía no
 # existe (evita depender de loguearte a la VM solo para el primer login).

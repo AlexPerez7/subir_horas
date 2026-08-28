@@ -1,4 +1,4 @@
-const API_BASE = 'https://asistente-vmware.tail8f4e31.ts.net';
+const API_BASE = 'https://registro-horas-backend.onrender.com';
 const TOKEN_KEY = 'registro_horas_token';
 const ULTIMA_TARJETA_KEY = 'registro_horas_ultima_tarjeta';
 const UMBRAL_HORAS_ALTAS = 9;

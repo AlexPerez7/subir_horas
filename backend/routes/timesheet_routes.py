@@ -260,48 +260,9 @@ def recordatorio():
     return jsonify(horas._calcular_recordatorio(g.usuario["tarjeta"]))
 
 
-@bp.route("/api/recordatorio-cron", methods=["GET"])
-def recordatorio_cron():
-    """
-    Igual que /api/recordatorio, pero pensada para un job automático
-    (GitHub Actions) sin usuario logueado - protegida por un secreto
-    compartido (header X-Cron-Secret) en vez de un token de sesión.
-    Revisa la tarjeta de BOOTSTRAP_ADMIN_TARJETA. Si CRON_SECRET no
-    está configurado, el endpoint queda deshabilitado (404) en vez de
-    aceptar pedidos sin protección.
-    """
-    if not config.CRON_SECRET or request.headers.get("X-Cron-Secret") != config.CRON_SECRET:
-        return jsonify({"error": "no encontrado"}), 404
-
-    tarjeta = config.BOOTSTRAP_ADMIN_TARJETA
-    if not tarjeta:
-        return jsonify({"error": "no hay BOOTSTRAP_ADMIN_TARJETA configurada"}), 500
-
-    return jsonify(horas._calcular_recordatorio(tarjeta))
-
-
 @bp.route("/api/resumen", methods=["GET"])
 def resumen_horas():
     return jsonify(horas._calcular_resumen(g.usuario["tarjeta"]))
-
-
-@bp.route("/api/resumen-semanal-cron", methods=["GET"])
-def resumen_semanal_cron():
-    """
-    Igual que /api/recordatorio-cron: pensada para un job automático
-    (GitHub Actions) sin usuario logueado, protegida por X-Cron-Secret.
-    Devuelve el total de horas de la semana actual para la tarjeta de
-    BOOTSTRAP_ADMIN_TARJETA, para mandar un resumen semanal por
-    Telegram (ver README).
-    """
-    if not config.CRON_SECRET or request.headers.get("X-Cron-Secret") != config.CRON_SECRET:
-        return jsonify({"error": "no encontrado"}), 404
-
-    tarjeta = config.BOOTSTRAP_ADMIN_TARJETA
-    if not tarjeta:
-        return jsonify({"error": "no hay BOOTSTRAP_ADMIN_TARJETA configurada"}), 500
-
-    return jsonify(horas._calcular_resumen(tarjeta))
 
 
 @bp.route("/api/dias-cargados", methods=["GET"])

@@ -1,0 +1,17 @@
+name: Keep Backend Alive
+
+# Hace un ping al endpoint / del backend cada 14 minutos
+# para evitar que Render lo ponga en modo reposo (sleep) por inactividad.
+
+on:
+  schedule:
+    - cron: "*/14 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  keep-alive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping backend health endpoint
+        run: |
+          curl -fsS https://registro-horas-backend.onrender.com/ || echo "Ping failed or backend sleeping"
