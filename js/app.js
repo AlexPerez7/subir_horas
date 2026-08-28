@@ -175,6 +175,8 @@ async function inicializar(){
   await Promise.allSettled(cargasIniciales);
   restaurarBorrador();
   inicializarAtajosTeclado();
+  iniciarCronometroLoop();
+  alCambiarFechaRegistro();
 }
 
 // Recarga en paralelo todos los paneles afectados tras crear, editar o borrar entradas
@@ -650,60 +652,87 @@ function setFecha(offsetDias){
   const d = new Date();
   d.setDate(d.getDate() + offsetDias);
   document.getElementById('fecha').valueAsDate = d;
+  alCambiarFechaRegistro();
 }
 
-function diasHabilesEnRango(desde, hasta){
-  const [y1, m1, d1] = desde.split('-').map(Number);
-  const [y2, m2, d2] = hasta.split('-').map(Number);
-  const cur = new Date(Date.UTC(y1, m1 - 1, d1));
-  const fin = new Date(Date.UTC(y2, m2 - 1, d2));
-  const dias = [];
-  while(cur <= fin){
-    const dow = cur.getUTCDay();
-    if(dow !== 0 && dow !== 6) dias.push(cur.toISOString().slice(0, 10));
-    cur.setUTCDate(cur.getUTCDate() + 1);
+const FAVORITAS_KEY = 'registro_horas_descripciones_favoritas';
+const FAVORITAS_DEFAULT = [
+  'Reunión de coordinación y daily standup',
+  'Soporte a incidencias y análisis de logs',
+  'Desarrollo y pruebas de funcionalidad',
+  'Revisión de código y PRs',
+  'Documentación y tareas de infraestructura'
+];
+
+function obtenerFavoritas(){
+  const raw = localStorage.getItem(FAVORITAS_KEY);
+  if(!raw){
+    localStorage.setItem(FAVORITAS_KEY, JSON.stringify(FAVORITAS_DEFAULT));
+    return FAVORITAS_DEFAULT;
   }
-  return dias;
-}
-
-function alternarModoLote(){
-  const activo = document.getElementById('loteToggle').checked;
-  document.getElementById('fechaUnica').style.display = activo ? 'none' : '';
-  document.getElementById('fechaRango').style.display = activo ? '' : 'none';
-  document.getElementById('horasLote').style.display = activo ? '' : 'none';
-  const textoEl = document.getElementById('btnRegistrarTexto');
-  if(textoEl){
-    textoEl.textContent = activo ? 'Registrar en lote (Odoo)' : 'Registrar en Odoo';
-  } else {
-    document.getElementById('btnRegistrar').textContent = activo ? 'Registrar en lote (Odoo)' : 'Registrar en Odoo';
-  }
-  actualizarPreviewLote();
-}
-
-function actualizarPreviewLote(){
-  const el = document.getElementById('previewLote');
-  const desde = document.getElementById('fechaDesde').value;
-  const hasta = document.getElementById('fechaHasta').value;
-  if(!desde || !hasta){ el.textContent = ''; el.className = 'status'; return; }
-  if(hasta < desde){ el.textContent = '"Hasta" debe ser igual o posterior a "Desde".'; el.className = 'status err'; return; }
-  const dias = diasHabilesEnRango(desde, hasta);
-  el.className = 'status';
-  el.textContent = dias.length === 0
-    ? 'No hay días hábiles (lun-vie) en ese rango.'
-    : dias.length + ' día' + (dias.length === 1 ? '' : 's') + ' hábil' + (dias.length === 1 ? '' : 'es') + ': ' + dias.map(formatearFecha).join(', ');
+  try { return JSON.parse(raw); } catch(e){ return FAVORITAS_DEFAULT; }
 }
 
 function renderChipsDescripcion(lineas){
   const cont = document.getElementById('chipsDescripcion');
-  const unicas = [...new Set(lineas.map(l => l.name).filter(Boolean))].slice(0, 5);
-  if(unicas.length === 0){ cont.innerHTML = ''; return; }
-  cont.innerHTML = unicas.map(desc =>
-    `<button type="button" class="chip chip-sky" title="${escapeHTML(desc)}" onclick="usarDescripcion(this)">${escapeHTML(desc)}</button>`
-  ).join('');
+  if(!cont) return;
+
+  const favoritas = obtenerFavoritas();
+  const unicasOdoo = [...new Set((lineas || []).map(l => l.name).filter(Boolean))].filter(d => !favoritas.includes(d)).slice(0, 3);
+
+  let html = '';
+
+  if(favoritas.length > 0){
+    html += favoritas.map(desc => `
+      <span class="chip chip-sky chip-fav" title="${escapeHTML(desc)}" onclick="usarDescripcionTexto(${jsAttr(desc)})">
+        ★ ${escapeHTML(desc)}
+        <span class="chip-fav-del" onclick="event.stopPropagation(); borrarDescripcionFavorita(${jsAttr(desc)})" title="Quitar de favoritas">×</span>
+      </span>
+    `).join('');
+  }
+
+  if(unicasOdoo.length > 0){
+    html += unicasOdoo.map(desc => `
+      <button type="button" class="chip" title="${escapeHTML(desc)}" onclick="usarDescripcionTexto(${jsAttr(desc)})">
+        ${escapeHTML(desc)}
+      </button>
+    `).join('');
+  }
+
+  cont.innerHTML = html;
+}
+
+function usarDescripcionTexto(texto){
+  const det = document.getElementById('detalle');
+  det.value = texto;
+  det.focus();
+  guardarBorrador();
 }
 
 function usarDescripcion(btn){
-  document.getElementById('detalle').value = btn.title;
+  usarDescripcionTexto(btn.title);
+}
+
+async function agregarDescripcionFavorita(){
+  const texto = await pedirTexto('Ingresa el texto para tu descripción favorita rápida:', {
+    titulo: 'Nueva descripción favorita',
+    textoAceptar: 'Agregar'
+  });
+  if(!texto || !texto.trim()) return;
+  const favs = obtenerFavoritas();
+  if(!favs.includes(texto.trim())){
+    favs.unshift(texto.trim());
+    localStorage.setItem(FAVORITAS_KEY, JSON.stringify(favs));
+    renderChipsDescripcion(HISTORIAL_ACTUAL);
+    mostrarToast('★ Añadida a tus descripciones favoritas.', 'ok');
+  }
+}
+
+function borrarDescripcionFavorita(texto){
+  let favs = obtenerFavoritas().filter(f => f !== texto);
+  localStorage.setItem(FAVORITAS_KEY, JSON.stringify(favs));
+  renderChipsDescripcion(HISTORIAL_ACTUAL);
+  mostrarToast('Favorita eliminada.', 'info');
 }
 
 // Prellena subtarea/horas/descripción con la última línea cargada en
@@ -1120,6 +1149,169 @@ function inicializarAtajosTeclado(){
   });
 }
 
+/* ==========================================================================
+   Cronómetro y Horas del Día
+   ========================================================================== */
+
+const CRONO_INICIO_KEY = 'registro_horas_crono_inicio';
+const CRONO_PAUSADO_KEY = 'registro_horas_crono_pausado';
+const CRONO_ESTADO_KEY = 'registro_horas_crono_estado';
+
+let _cronoInterval = null;
+
+function pad2(n){ return String(n).padStart(2, '0'); }
+
+function formatoTiempo(segundosTotales){
+  const h = Math.floor(segundosTotales / 3600);
+  const m = Math.floor((segundosTotales % 3600) / 60);
+  const s = Math.floor(segundosTotales % 60);
+  return pad2(h) + ':' + pad2(m) + ':' + pad2(s);
+}
+
+function actualizarDisplayCronometro(){
+  const estado = localStorage.getItem(CRONO_ESTADO_KEY) || 'detenido';
+  const inicio = parseInt(localStorage.getItem(CRONO_INICIO_KEY) || '0', 10);
+  const pausadoMs = parseInt(localStorage.getItem(CRONO_PAUSADO_KEY) || '0', 10);
+
+  const box = document.getElementById('cronometroBox');
+  const tiempoEl = document.getElementById('cronometroTiempo');
+  const horasEl = document.getElementById('cronometroHoras');
+  const btnIniciar = document.getElementById('btnCronoIniciar');
+  const btnDetener = document.getElementById('btnCronoDetener');
+  const btnReset = document.getElementById('btnCronoReset');
+
+  if(!box || !tiempoEl) return;
+
+  let transcurridoMs = 0;
+  if(estado === 'corriendo' && inicio > 0){
+    transcurridoMs = Date.now() - inicio + pausadoMs;
+    box.classList.add('corriendo');
+    btnIniciar.textContent = '⏸ Pausar';
+    btnDetener.style.display = '';
+    btnReset.style.display = '';
+  } else if(estado === 'pausado'){
+    transcurridoMs = pausadoMs;
+    box.classList.remove('corriendo');
+    btnIniciar.textContent = '▶ Reanudar';
+    btnDetener.style.display = '';
+    btnReset.style.display = '';
+  } else {
+    transcurridoMs = 0;
+    box.classList.remove('corriendo');
+    btnIniciar.textContent = '▶ Iniciar';
+    btnDetener.style.display = 'none';
+    btnReset.style.display = 'none';
+  }
+
+  const segundos = Math.floor(transcurridoMs / 1000);
+  tiempoEl.textContent = formatoTiempo(segundos);
+  const decimalHoras = (segundos / 3600).toFixed(2);
+  horasEl.textContent = '(' + decimalHoras + 'h)';
+}
+
+function iniciarCronometroLoop(){
+  if(_cronoInterval) clearInterval(_cronoInterval);
+  _cronoInterval = setInterval(actualizarDisplayCronometro, 1000);
+  actualizarDisplayCronometro();
+}
+
+function alternarCronometro(){
+  const estado = localStorage.getItem(CRONO_ESTADO_KEY) || 'detenido';
+  if(estado === 'corriendo'){
+    const inicio = parseInt(localStorage.getItem(CRONO_INICIO_KEY) || '0', 10);
+    const prevPausado = parseInt(localStorage.getItem(CRONO_PAUSADO_KEY) || '0', 10);
+    const acumulado = Date.now() - inicio + prevPausado;
+    localStorage.setItem(CRONO_ESTADO_KEY, 'pausado');
+    localStorage.setItem(CRONO_PAUSADO_KEY, String(acumulado));
+    localStorage.removeItem(CRONO_INICIO_KEY);
+    mostrarToast('⏱️ Cronómetro pausado.', 'info');
+  } else if(estado === 'pausado'){
+    localStorage.setItem(CRONO_ESTADO_KEY, 'corriendo');
+    localStorage.setItem(CRONO_INICIO_KEY, String(Date.now()));
+  } else {
+    localStorage.setItem(CRONO_ESTADO_KEY, 'corriendo');
+    localStorage.setItem(CRONO_INICIO_KEY, String(Date.now()));
+    localStorage.setItem(CRONO_PAUSADO_KEY, '0');
+    mostrarToast('⏱️ Cronómetro iniciado.', 'info');
+  }
+  actualizarDisplayCronometro();
+}
+
+function detenerCronometro(){
+  const estado = localStorage.getItem(CRONO_ESTADO_KEY) || 'detenido';
+  let transcurridoMs = 0;
+  if(estado === 'corriendo'){
+    const inicio = parseInt(localStorage.getItem(CRONO_INICIO_KEY) || '0', 10);
+    const prevPausado = parseInt(localStorage.getItem(CRONO_PAUSADO_KEY) || '0', 10);
+    transcurridoMs = Date.now() - inicio + prevPausado;
+  } else if(estado === 'pausado'){
+    transcurridoMs = parseInt(localStorage.getItem(CRONO_PAUSADO_KEY) || '0', 10);
+  }
+
+  reiniciarCronometro(false);
+
+  const horasExactas = transcurridoMs / (1000 * 3600);
+  let horasFinales = Math.round(horasExactas * 4) / 4;
+  if(horasFinales <= 0 && transcurridoMs > 60000) horasFinales = 0.25;
+
+  if(horasFinales > 0){
+    document.getElementById('horas').value = horasFinales;
+    guardarBorrador();
+    alCambiarHorasRegistro();
+    mostrarToast('⏱️ ' + horasFinales + 'h cargadas en el formulario.', 'ok');
+  }
+}
+
+function reiniciarCronometro(notificar = true){
+  localStorage.removeItem(CRONO_ESTADO_KEY);
+  localStorage.removeItem(CRONO_INICIO_KEY);
+  localStorage.removeItem(CRONO_PAUSADO_KEY);
+  actualizarDisplayCronometro();
+  if(notificar) mostrarToast('⏱️ Cronómetro descartado.', 'info');
+}
+
+let _timeoutHorasDia = null;
+
+async function alCambiarFechaRegistro(){
+  guardarBorrador();
+  clearTimeout(_timeoutHorasDia);
+  _timeoutHorasDia = setTimeout(actualizarHorasAcumuladasDia, 200);
+}
+
+function alCambiarHorasRegistro(){
+  guardarBorrador();
+  clearTimeout(_timeoutHorasDia);
+  _timeoutHorasDia = setTimeout(actualizarHorasAcumuladasDia, 200);
+}
+
+async function actualizarHorasAcumuladasDia(){
+  const fecha = document.getElementById('fecha').value;
+  const infoEl = document.getElementById('infoHorasDia');
+  const horasInput = parseFloat(document.getElementById('horas').value) || 0;
+  if(!infoEl) return;
+  if(!fecha){ infoEl.style.display = 'none'; return; }
+
+  try{
+    const tarjeta = tarjetaActual();
+    const res = await api('/api/timesheet/dia?fecha=' + encodeURIComponent(fecha) + '&tarjeta=' + encodeURIComponent(tarjeta));
+    const data = await res.json();
+    const horasCargadas = data.total_horas || 0;
+    const sumaTotal = horasCargadas + horasInput;
+
+    infoEl.style.display = 'flex';
+    if(horasCargadas === 0 && horasInput === 0){
+      infoEl.innerHTML = '<span class="tag-dia-horas">0h cargadas en este día</span>';
+    } else if(sumaTotal > 9){
+      infoEl.innerHTML = `<span class="tag-dia-horas tag-alerta">⚠️ ${horasCargadas.toFixed(1)}h previas + ${horasInput.toFixed(1)}h = <b>${sumaTotal.toFixed(1)}h total</b></span>`;
+    } else {
+      const restantes = Math.max(0, 8.5 - sumaTotal).toFixed(1);
+      infoEl.innerHTML = `<span class="tag-dia-horas">📅 ${horasCargadas.toFixed(1)}h registradas (quedan ~${restantes}h)</span>`;
+    }
+  } catch(e){
+    infoEl.style.display = 'none';
+  }
+}
+
 function mostrarStatus(html, tipo, conToast = true){
   const el = document.getElementById('status');
   if(el){
@@ -1174,13 +1366,19 @@ function formatearFecha(iso){
 }
 
 function renderFilasHistorial(lineas, conSubtarea){
-  document.getElementById('tbodyOdoo').innerHTML = lineas.map(l => `
+  document.getElementById('tbodyOdoo').innerHTML = lineas.map(l => {
+    const subtareaVal = l.subtarea || document.getElementById('subtarea').value;
+    return `
     <tr>
       ${conSubtarea ? `<td class="desc">${escapeHTML(l.subtarea)}</td>` : ''}
       <td class="desc">${formatearFecha(l.date)}</td>
       <td class="hrs">${l.unit_amount.toFixed(2)}h</td>
       <td class="desc">${escapeHTML(l.name || '—')}</td>
-    </tr>`).join('');
+      <td style="white-space:nowrap; text-align:right;">
+        <button type="button" class="del" onclick="clonarRegistro(${jsAttr(subtareaVal)}, ${l.unit_amount}, ${jsAttr(l.name || '')})" title="Clonar al formulario" aria-label="Clonar">📋</button>
+      </td>
+    </tr>`;
+  }).join('');
 }
 
 function filtrarHistorial(){
@@ -1520,11 +1718,51 @@ function renderTablaDia(){
       <td><span class="tag">${escapeHTML(l.subtarea)}</span></td>
       <td class="hrs">${l.horas.toFixed(2)}h</td>
       <td class="desc">${escapeHTML(l.descripcion || '—')}</td>
-      <td style="white-space:nowrap;">
+      <td style="white-space:nowrap; text-align:right;">
+        <button type="button" class="del" onclick="clonarRegistro(${jsAttr(l.subtarea)}, ${l.horas}, ${jsAttr(l.descripcion || '')})" title="Clonar al formulario" aria-label="Clonar">📋</button>
         <button type="button" class="del" style="color:var(--text-dim);" onclick="activarEdicion(${l.id})" title="Editar" aria-label="Editar">✎</button>
         <button type="button" class="del" onclick="eliminarLineaDia(${l.id})" title="Eliminar" aria-label="Eliminar">🗑</button>
       </td>
     </tr>`).join('');
+}
+
+function clonarRegistro(subtarea, horas, detalle){
+  mostrarTab('registrar');
+  const sel = document.getElementById('subtarea');
+  if(sel && subtarea){
+    const existe = Array.from(sel.options).some(o => o.value === subtarea);
+    if(existe && sel.value !== subtarea){
+      sel.value = subtarea;
+      localStorage.setItem(ultimaSubtareaKey(tarjetaActual()), subtarea);
+      cargarHistorial();
+    }
+  }
+  document.getElementById('horas').value = horas || '';
+  document.getElementById('detalle').value = detalle || '';
+  guardarBorrador();
+  alCambiarHorasRegistro();
+  mostrarToast('📋 Registro copiado al formulario.', 'ok');
+  document.getElementById('horas').focus();
+}
+
+function setFechaConsulta(offsetDias){
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDias);
+  const iso = d.toISOString().slice(0, 10);
+  document.getElementById('fechaConsulta').value = iso;
+  consultarDia();
+}
+
+function navegarDiaConsulta(offsetDias){
+  const input = document.getElementById('fechaConsulta');
+  let actual = input.value ? new Date(input.value + 'T00:00:00') : new Date();
+  actual.setDate(actual.getDate() + offsetDias);
+  input.value = actual.toISOString().slice(0, 10);
+  consultarDia();
+}
+
+function imprimirReporte(){
+  window.print();
 }
 
 function mostrarStatusDia(html, tipo, conToast = true){

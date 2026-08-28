@@ -123,6 +123,9 @@
         </div>
       </div>
     </div>
+    <div class="reporte-bar">
+      <button type="button" class="ghost" onclick="imprimirReporte()">📄 Imprimir / Guardar Resumen en PDF</button>
+    </div>
   </div>
 
   <div id="tabRegistrar" class="tab-panel" style="margin-top:20px;">
@@ -138,6 +141,21 @@
       <label for="subtarea">Subtarea</label>
       <select id="subtarea" disabled><option>Selecciona una tarjeta primero</option></select>
 
+      <div class="cronometro-card" id="cronometroBox">
+        <div class="cronometro-header">
+          <div class="cronometro-info">
+            <span class="cronometro-icono" id="cronoIcono">⏱️</span>
+            <span class="cronometro-tiempo" id="cronometroTiempo">00:00:00</span>
+            <span class="cronometro-horas" id="cronometroHoras">(0.00h)</span>
+          </div>
+          <div class="cronometro-acciones">
+            <button type="button" class="btn-crono" id="btnCronoIniciar" onclick="alternarCronometro()">▶ Iniciar</button>
+            <button type="button" class="btn-crono btn-crono-stop" id="btnCronoDetener" onclick="detenerCronometro()" style="display:none;">⏹ Cargar horas</button>
+            <button type="button" class="btn-crono-reset" id="btnCronoReset" onclick="reiniciarCronometro()" style="display:none;" title="Descartar tiempo">✕</button>
+          </div>
+        </div>
+      </div>
+
       <button type="button" class="ghost" style="margin-top:10px;" onclick="repetirUltimoRegistro(this)">↻ Repetir último registro</button>
 
       <label class="lote-toggle">
@@ -148,15 +166,16 @@
       <div class="row2" id="fechaUnica">
         <div>
           <label for="fecha">Fecha</label>
-          <input type="date" id="fecha">
+          <input type="date" id="fecha" onchange="alCambiarFechaRegistro()">
           <div class="chips">
             <button type="button" class="chip" onclick="setFecha(0)">Hoy</button>
             <button type="button" class="chip" onclick="setFecha(-1)">Ayer</button>
           </div>
+          <div id="infoHorasDia" class="info-horas-dia" style="display:none;"></div>
         </div>
         <div>
           <label for="horas">Horas</label>
-          <input type="number" id="horas" step="0.25" min="0.25" placeholder="1.5">
+          <input type="number" id="horas" step="0.25" min="0.25" placeholder="1.5" oninput="alCambiarHorasRegistro()">
         </div>
       </div>
 
@@ -176,7 +195,10 @@
         <div class="status" id="previewLote"></div>
       </div>
 
-      <label for="detalle">Descripción</label>
+      <div class="desc-header">
+        <label for="detalle" style="margin:0;">Descripción</label>
+        <button type="button" class="link-btn" onclick="agregarDescripcionFavorita()">+ Añadir favorita</button>
+      </div>
       <textarea id="detalle" placeholder="Ej: revisión de logs de conectores CDE, rotación de credenciales..."></textarea>
       <div class="chips" id="chipsDescripcion"></div>
 
@@ -201,10 +223,10 @@
       <div class="tabla-scroll">
         <table>
           <thead>
-            <tr><th id="thSubtareaHistorial" style="width:22%; display:none;">Subtarea</th><th style="width:16%">Fecha</th><th style="width:12%">Horas</th><th>Descripción</th></tr>
+            <tr><th id="thSubtareaHistorial" style="width:22%; display:none;">Subtarea</th><th style="width:16%">Fecha</th><th style="width:12%">Horas</th><th>Descripción</th><th style="width:36px"></th></tr>
           </thead>
           <tbody id="tbodyOdoo">
-            <tr><td colspan="3" class="empty">Elige una subtarea para ver su historial.</td></tr>
+            <tr><td colspan="4" class="empty">Elige una subtarea para ver su historial.</td></tr>
           </tbody>
         </table>
       </div>
@@ -220,16 +242,24 @@
       <div class="row2" style="align-items:end;">
         <div>
           <label for="fechaConsulta">Fecha a consultar</label>
-          <input type="date" id="fechaConsulta">
+          <input type="date" id="fechaConsulta" onchange="consultarDia()">
         </div>
         <div>
           <button class="primary" style="margin-top:0;" onclick="consultarDia()">Ver horas de ese día</button>
         </div>
       </div>
+      <div class="dia-nav-wrapper">
+        <div class="dia-nav-controles">
+          <button type="button" class="chip" onclick="navegarDiaConsulta(-1)">◀ Anterior</button>
+          <button type="button" class="chip" onclick="setFechaConsulta(0)">Hoy</button>
+          <button type="button" class="chip" onclick="setFechaConsulta(-1)">Ayer</button>
+          <button type="button" class="chip" onclick="navegarDiaConsulta(1)">Siguiente ▶</button>
+        </div>
+      </div>
       <div class="tabla-scroll" style="margin-top:16px;">
         <table>
           <thead>
-            <tr><th style="width:26%">Subtarea</th><th style="width:12%">Horas</th><th>Descripción</th><th style="width:90px"></th></tr>
+            <tr><th style="width:26%">Subtarea</th><th style="width:12%">Horas</th><th>Descripción</th><th style="width:110px"></th></tr>
           </thead>
           <tbody id="tbodyDia">
             <tr><td colspan="4" class="empty">Elige una fecha y presiona "Ver horas de ese día".</td></tr>
