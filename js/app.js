@@ -148,29 +148,42 @@ async function inicializar(){
   wireAvatarMenu();
   aplicarLabelsTema();
 
+  actualizarVisibilidadTabs();
+
+  const cargasIniciales = [
+    verificarRecordatorio(),
+    cargarResumen(),
+    cargarHeatmap()
+  ];
+
   if(ES_ADMIN){
     document.getElementById('labelTarjeta').style.display = '';
     document.getElementById('tarjeta').style.display = '';
     document.getElementById('tarjetaFija').style.display = 'none';
-    cargarTarjetas();
-    cargarUsuarios();
-    cargarAuditoria();
+    cargasIniciales.push(cargarTarjetas());
+    cargasIniciales.push(cargarUsuarios());
+    cargasIniciales.push(cargarAuditoria());
   } else {
     document.getElementById('labelTarjeta').style.display = 'none';
     document.getElementById('tarjeta').style.display = 'none';
     const fija = document.getElementById('tarjetaFija');
     fija.style.display = 'block';
     fija.textContent = yo.tarjeta;
-    cargarSubtareas();
+    cargasIniciales.push(cargarSubtareas());
   }
 
-  actualizarVisibilidadTabs();
-  verificarRecordatorio();
-  cargarResumen();
-  cargarHeatmap();
-  // cargarFaltantesMes() no se llama acá: ya la dispara cargarSubtareas()
-  // (llamada arriba, directo o vía cargarTarjetas()) para evitar un
-  // segundo pedido duplicado en cada carga de la app.
+  await Promise.allSettled(cargasIniciales);
+}
+
+// Recarga en paralelo todos los paneles afectados tras crear, editar o borrar entradas
+async function refrescarDatosApp(){
+  await Promise.allSettled([
+    cargarHistorial(),
+    cargarResumen(),
+    cargarHeatmap(),
+    cargarFaltantesMes(),
+    verificarRecordatorio()
+  ]);
 }
 
 // En mobile el avatar abre un menú desplegable con las acciones de cuenta
@@ -880,25 +893,62 @@ async function eliminarUsuarioAdmin(username){
   }
 }
 
-async function cargarSubtareas(){
+let SUBTAREAS_CACHE = null;
+let SUBTAREAS_CACHE_TARJETA = null;
+
+async function cargarSubtareas(forceRefresh = false){
   const tarjeta = tarjetaActual();
+  if(!tarjeta) return;
   const selSub = document.getElementById('subtarea');
   selSub.disabled = true;
-  selSub.innerHTML = '<option>Cargando...</option>';
-  try{
-    const res = await api('/api/subtareas?tarjeta=' + encodeURIComponent(tarjeta));
-    const subtareas = await res.json();
-    selSub.innerHTML = subtareas.map(s => `<option value="${escapeHTML(s.name)}">${escapeHTML(s.name)}</option>`).join('');
-    selSub.disabled = false;
-    const ultimaSubtarea = localStorage.getItem(ultimaSubtareaKey(tarjeta));
-    if(ultimaSubtarea && subtareas.some(s => s.name === ultimaSubtarea)){
-      selSub.value = ultimaSubtarea;
+
+  const cacheKey = 'cache_subtareas_' + tarjeta;
+  const cacheTsKey = 'cache_subtareas_ts_' + tarjeta;
+  const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutos
+
+  let subtareas = null;
+  if(!forceRefresh){
+    if(SUBTAREAS_CACHE && SUBTAREAS_CACHE_TARJETA === tarjeta){
+      subtareas = SUBTAREAS_CACHE;
+    } else {
+      const cachedStr = sessionStorage.getItem(cacheKey);
+      const cachedTs = parseInt(sessionStorage.getItem(cacheTsKey) || '0', 10);
+      if(cachedStr && (Date.now() - cachedTs < CACHE_TTL_MS)){
+        try{ subtareas = JSON.parse(cachedStr); } catch(e){}
+      }
     }
-    cargarHistorial();
-    cargarFaltantesMes();
-  } catch(e){
-    selSub.innerHTML = '<option>Error cargando subtareas</option>';
   }
+
+  if(!subtareas){
+    selSub.innerHTML = '<option>Cargando...</option>';
+    try{
+      const res = await api('/api/subtareas?tarjeta=' + encodeURIComponent(tarjeta));
+      subtareas = await res.json();
+      if(Array.isArray(subtareas)){
+        SUBTAREAS_CACHE = subtareas;
+        SUBTAREAS_CACHE_TARJETA = tarjeta;
+        sessionStorage.setItem(cacheKey, JSON.stringify(subtareas));
+        sessionStorage.setItem(cacheTsKey, String(Date.now()));
+      }
+    } catch(e){
+      selSub.innerHTML = '<option>Error cargando subtareas</option>';
+      return;
+    }
+  } else {
+    SUBTAREAS_CACHE = subtareas;
+    SUBTAREAS_CACHE_TARJETA = tarjeta;
+  }
+
+  selSub.innerHTML = subtareas.map(s => `<option value="${escapeHTML(s.name)}">${escapeHTML(s.name)}</option>`).join('');
+  selSub.disabled = false;
+  const ultimaSubtarea = localStorage.getItem(ultimaSubtareaKey(tarjeta));
+  if(ultimaSubtarea && subtareas.some(s => s.name === ultimaSubtarea)){
+    selSub.value = ultimaSubtarea;
+  }
+  await Promise.allSettled([
+    cargarHistorial(),
+    cargarFaltantesMes()
+  ]);
 }
 
 document.getElementById('tarjeta').addEventListener('change', () => {
@@ -986,6 +1036,7 @@ function filtrarHistorial(){
 // buscar en TODAS las subtareas de la tarjeta - útil cuando no te acuerdas
 // bajo cuál cargaste algo. Debounced para no disparar un pedido por tecla.
 let _debounceBusquedaGlobal = null;
+let _abortControllerBusqueda = null;
 
 function onBuscarHistorial(){
   const esGlobal = document.getElementById('buscarGlobalToggle').checked;
@@ -1005,11 +1056,17 @@ async function buscarHistorialGlobal(){
     tbody.innerHTML = '<tr><td colspan="4" class="empty">Escribe algo para buscar en todas tus subtareas.</td></tr>';
     return;
   }
+
+  if(_abortControllerBusqueda){
+    _abortControllerBusqueda.abort();
+  }
+  _abortControllerBusqueda = new AbortController();
+
   tbody.innerHTML = '<tr><td colspan="4" class="empty">Buscando...</td></tr>';
   try{
     const tarjeta = tarjetaActual();
     const url = '/api/timesheet/buscar?tarjeta=' + encodeURIComponent(tarjeta) + '&q=' + encodeURIComponent(q);
-    const res = await api(url);
+    const res = await api(url, { signal: _abortControllerBusqueda.signal });
     const data = await res.json();
     if(data.lineas.length === 0){
       tbody.innerHTML = '<tr><td colspan="4" class="empty">Sin coincidencias en ninguna subtarea.</td></tr>';
@@ -1017,6 +1074,7 @@ async function buscarHistorialGlobal(){
     }
     renderFilasHistorial(data.lineas, true);
   } catch(e){
+    if(e.name === 'AbortError') return;
     tbody.innerHTML = '<tr><td colspan="4" class="empty">Error buscando.</td></tr>';
   }
 }
@@ -1062,10 +1120,7 @@ async function registrarEnOdoo(){
     mostrarStatus('Registrado en Odoo (id ' + data.id + '). <a href="#" onclick="deshacer(' + data.id + '); return false;" style="color:var(--accent)">Deshacer</a>', 'ok');
     document.getElementById('horas').value = '';
     document.getElementById('detalle').value = '';
-    cargarHistorial();
-    cargarResumen();
-    cargarHeatmap();
-    cargarFaltantesMes();
+    await refrescarDatosApp();
   } catch(e){
     mostrarStatus('No se pudo conectar al backend: ' + escapeHTML(e.message), 'err');
   } finally {
@@ -1115,20 +1170,14 @@ async function registrarEnLote(){
       if(!res.ok || data.error){
         mostrarStatus('Se registraron ' + creados + ' de ' + dias.length + ' días. Error en ' + formatearFecha(fecha) + ': ' + escapeHTML(data.error || res.statusText), 'err');
         btn.disabled = false;
-        cargarHistorial();
-        cargarResumen();
-        cargarHeatmap();
-        cargarFaltantesMes();
+        await refrescarDatosApp();
         return;
       }
       creados++;
     } catch(e){
       mostrarStatus('Se registraron ' + creados + ' de ' + dias.length + ' días. Se cortó la conexión: ' + escapeHTML(e.message), 'err');
       btn.disabled = false;
-      cargarHistorial();
-      cargarResumen();
-      cargarHeatmap();
-      cargarFaltantesMes();
+      await refrescarDatosApp();
       return;
     }
   }
@@ -1137,10 +1186,7 @@ async function registrarEnLote(){
   document.getElementById('horasLoteInput').value = '';
   document.getElementById('detalle').value = '';
   btn.disabled = false;
-  cargarHistorial();
-  cargarResumen();
-  cargarHeatmap();
-  cargarFaltantesMes();
+  await refrescarDatosApp();
 }
 
 async function deshacer(id){
@@ -1150,10 +1196,7 @@ async function deshacer(id){
     const data = await res.json();
     if(data.ok){
       mostrarStatus('Entrada eliminada.', 'ok');
-      cargarHistorial();
-      cargarResumen();
-      cargarHeatmap();
-      cargarFaltantesMes();
+      await refrescarDatosApp();
     } else {
       mostrarStatus('No se pudo deshacer.', 'err');
     }
@@ -1239,18 +1282,26 @@ function exportarExcel(){
 }
 
 let LINEAS_DIA_ACTUAL = [];
-let SUBTAREAS_CACHE = null;
-let SUBTAREAS_CACHE_TARJETA = null;
 
 async function subtareasParaEditor(){
   const tarjeta = tarjetaActual();
-  // Cacheado junto con la tarjeta a la que corresponde: si un admin cambia
-  // de tarjeta, no queremos mostrarle (ni dejarle guardar) subtareas de la
-  // tarjeta anterior.
   if(SUBTAREAS_CACHE && SUBTAREAS_CACHE_TARJETA === tarjeta) return SUBTAREAS_CACHE;
+  const cacheKey = 'cache_subtareas_' + tarjeta;
+  const cachedStr = sessionStorage.getItem(cacheKey);
+  if(cachedStr){
+    try{
+      SUBTAREAS_CACHE = JSON.parse(cachedStr);
+      SUBTAREAS_CACHE_TARJETA = tarjeta;
+      return SUBTAREAS_CACHE;
+    } catch(e){}
+  }
   const res = await api('/api/subtareas?tarjeta=' + encodeURIComponent(tarjeta));
   SUBTAREAS_CACHE = await res.json();
   SUBTAREAS_CACHE_TARJETA = tarjeta;
+  if(Array.isArray(SUBTAREAS_CACHE)){
+    sessionStorage.setItem(cacheKey, JSON.stringify(SUBTAREAS_CACHE));
+    sessionStorage.setItem('cache_subtareas_ts_' + tarjeta, String(Date.now()));
+  }
   return SUBTAREAS_CACHE;
 }
 
@@ -1339,10 +1390,7 @@ async function eliminarLineaDia(id){
       horas: linea.horas,
       detalle: linea.descripcion,
     } : null;
-    await consultarDia();
-    cargarResumen();
-    cargarHeatmap();
-    cargarFaltantesMes();
+    await Promise.allSettled([consultarDia(), refrescarDatosApp()]);
     if(ULTIMA_LINEA_ELIMINADA_DIA){
       mostrarStatusDia('Entrada eliminada. <a href="#" onclick="deshacerEliminacionDia(); return false;" style="color:var(--accent)">Deshacer</a>', 'ok');
     }
@@ -1368,10 +1416,7 @@ async function deshacerEliminacionDia(){
       return;
     }
     mostrarStatusDia('Entrada restaurada.', 'ok');
-    consultarDia();
-    cargarResumen();
-    cargarHeatmap();
-    cargarFaltantesMes();
+    await Promise.allSettled([consultarDia(), refrescarDatosApp()]);
   } catch(e){
     mostrarStatusDia('No se pudo conectar al backend: ' + escapeHTML(e.message), 'err');
   }
@@ -1429,10 +1474,7 @@ async function guardarEdicion(id){
       id, tarjeta: tarjetaActual(),
       subtarea: linea.subtarea, horas: linea.horas, detalle: linea.descripcion,
     } : null;
-    await consultarDia();
-    cargarResumen();
-    cargarHeatmap();
-    cargarFaltantesMes();
+    await Promise.allSettled([consultarDia(), refrescarDatosApp()]);
     if(ULTIMA_EDICION_DIA){
       mostrarStatusDia('Cambios guardados. <a href="#" onclick="deshacerEdicionDia(); return false;" style="color:var(--accent)">Deshacer</a>', 'ok');
     }
@@ -1458,10 +1500,7 @@ async function deshacerEdicionDia(){
       return;
     }
     mostrarStatusDia('Cambios revertidos.', 'ok');
-    consultarDia();
-    cargarResumen();
-    cargarHeatmap();
-    cargarFaltantesMes();
+    await Promise.allSettled([consultarDia(), refrescarDatosApp()]);
   } catch(e){
     mostrarStatusDia('No se pudo conectar al backend: ' + escapeHTML(e.message), 'err');
   }

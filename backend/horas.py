@@ -130,15 +130,12 @@ def _calcular_resumen(tarjeta):
     total_mes = sum(l["unit_amount"] for l in lineas if inicio_mes_iso <= l["date"] <= fin_mes_iso)
 
     lineas_semana = [l for l in lineas if inicio_semana_iso <= l["date"] <= fin_semana_iso]
-    ids_unicos = list({l["task_id"][0] for l in lineas_semana})
-    nombres = {}
-    if ids_unicos:
-        tareas = odoo_client.odoo_execute_kw("project.task", "read", [ids_unicos], {"fields": ["name"]})
-        nombres = {t["id"]: t["name"] for t in tareas}
+    subtareas_nombres = {t["id"]: t["name"] for t in odoo_client.subtareas_de_tarjeta(tarjeta)}
 
     por_subtarea_totales = {}
     for l in lineas_semana:
-        nombre = nombres.get(l["task_id"][0], l["task_id"][1])
+        tid = l["task_id"][0]
+        nombre = subtareas_nombres.get(tid) or (l["task_id"][1] if len(l["task_id"]) > 1 else str(tid))
         por_subtarea_totales[nombre] = por_subtarea_totales.get(nombre, 0) + l["unit_amount"]
     por_subtarea = sorted(
         [{"subtarea": k, "horas": v} for k, v in por_subtarea_totales.items()],
