@@ -173,6 +173,8 @@ async function inicializar(){
   }
 
   await Promise.allSettled(cargasIniciales);
+  restaurarBorrador();
+  inicializarAtajosTeclado();
 }
 
 // Recarga en paralelo todos los paneles afectados tras crear, editar o borrar entradas
@@ -405,6 +407,7 @@ function primerDiaDelMesISO(){
 
 async function cargarFaltantesMes(){
   const cont = document.getElementById('listaFaltantesMes');
+  if(cont) cont.innerHTML = '<div class="skeleton skeleton-cell" style="width:130px; margin-bottom:8px;"></div><div class="chips">' + skeletonChips(4) + '</div>';
   try{
     const tarjeta = tarjetaActual();
     const url = '/api/dias-faltantes?desde=' + primerDiaDelMesISO() + '&tarjeta=' + encodeURIComponent(tarjeta);
@@ -668,7 +671,12 @@ function alternarModoLote(){
   document.getElementById('fechaUnica').style.display = activo ? 'none' : '';
   document.getElementById('fechaRango').style.display = activo ? '' : 'none';
   document.getElementById('horasLote').style.display = activo ? '' : 'none';
-  document.getElementById('btnRegistrar').textContent = activo ? 'Registrar en lote (Odoo)' : 'Registrar en Odoo';
+  const textoEl = document.getElementById('btnRegistrarTexto');
+  if(textoEl){
+    textoEl.textContent = activo ? 'Registrar en lote (Odoo)' : 'Registrar en Odoo';
+  } else {
+    document.getElementById('btnRegistrar').textContent = activo ? 'Registrar en lote (Odoo)' : 'Registrar en Odoo';
+  }
   actualizarPreviewLote();
 }
 
@@ -758,6 +766,7 @@ async function cargarTarjetas(){
 
 async function cargarUsuarios(){
   const tbody = document.getElementById('tbodyUsuarios');
+  if(tbody) tbody.innerHTML = skeletonTablaFilas(3, 4);
   try{
     const res = await api('/api/usuarios');
     const usuarios = await res.json();
@@ -960,10 +969,166 @@ document.getElementById('subtarea').addEventListener('change', () => {
   cargarHistorial();
 });
 
-function mostrarStatus(html, tipo){
+/* ==========================================================================
+   Toasts, Skeletons, Borrador Automático y Atajos de Teclado
+   ========================================================================== */
+
+function mostrarToast(contenidoHtml, tipo = 'info', duracionMs = 4000){
+  const container = document.getElementById('toastContainer');
+  if(!container) return;
+
+  const toast = document.createElement('div');
+  toast.className = 'toast toast-' + tipo;
+
+  const iconos = {
+    ok: '✓',
+    err: '✕',
+    warn: '!',
+    info: 'ℹ'
+  };
+  const iconChar = iconos[tipo] || 'ℹ';
+
+  toast.innerHTML = `
+    <div class="toast-icon">${iconChar}</div>
+    <div class="toast-content">${contenidoHtml}</div>
+    <button type="button" class="toast-close" aria-label="Cerrar">×</button>
+    <div class="toast-progress" style="animation-duration: ${duracionMs}ms;"></div>
+  `;
+
+  const btnClose = toast.querySelector('.toast-close');
+  let timeoutId = null;
+
+  const cerrar = () => {
+    if(toast.classList.contains('ocultando')) return;
+    toast.classList.remove('visible');
+    toast.classList.add('ocultando');
+    setTimeout(() => {
+      if(toast.parentElement) toast.parentElement.removeChild(toast);
+    }, 260);
+  };
+
+  btnClose.onclick = cerrar;
+
+  container.appendChild(toast);
+  requestAnimationFrame(() => {
+    toast.classList.add('visible');
+  });
+
+  timeoutId = setTimeout(cerrar, duracionMs);
+
+  toast.onmouseenter = () => {
+    clearTimeout(timeoutId);
+    const progress = toast.querySelector('.toast-progress');
+    if(progress) progress.style.animationPlayState = 'paused';
+  };
+  toast.onmouseleave = () => {
+    timeoutId = setTimeout(cerrar, 1500);
+    const progress = toast.querySelector('.toast-progress');
+    if(progress) progress.style.animationPlayState = 'running';
+  };
+}
+
+function skeletonTablaFilas(filas = 3, cols = 3){
+  return Array.from({length: filas}, () => `
+    <tr class="skeleton-row-tr">
+      ${Array.from({length: cols}, (_, i) => `
+        <td><div class="skeleton skeleton-cell" style="width: ${i === 0 ? '70%' : i === 1 ? '35%' : '85%'}"></div></td>
+      `).join('')}
+    </tr>
+  `).join('');
+}
+
+function skeletonChips(cantidad = 4){
+  return Array.from({length: cantidad}, () => `<div class="skeleton skeleton-chip"></div>`).join('');
+}
+
+const BORRADOR_KEY = 'registro_horas_borrador';
+
+function guardarBorrador(){
+  const detalle = document.getElementById('detalle')?.value || '';
+  const horas = document.getElementById('horas')?.value || '';
+  const fecha = document.getElementById('fecha')?.value || '';
+  const subtarea = document.getElementById('subtarea')?.value || '';
+
+  if(!detalle && !horas){
+    localStorage.removeItem(BORRADOR_KEY);
+    const ind = document.getElementById('draftIndicator');
+    if(ind) ind.classList.remove('visible');
+    return;
+  }
+
+  localStorage.setItem(BORRADOR_KEY, JSON.stringify({ detalle, horas, fecha, subtarea }));
+  const ind = document.getElementById('draftIndicator');
+  if(ind){
+    ind.classList.add('visible');
+    ind.textContent = '💾 Borrador guardado';
+  }
+}
+
+function restaurarBorrador(){
+  const raw = localStorage.getItem(BORRADOR_KEY);
+  if(!raw) return;
+  try{
+    const borrador = JSON.parse(raw);
+    if(borrador.detalle && !document.getElementById('detalle').value){
+      document.getElementById('detalle').value = borrador.detalle;
+    }
+    if(borrador.horas && !document.getElementById('horas').value){
+      document.getElementById('horas').value = borrador.horas;
+    }
+    if(borrador.fecha && !document.getElementById('fecha').value){
+      document.getElementById('fecha').value = borrador.fecha;
+    }
+    const ind = document.getElementById('draftIndicator');
+    if(ind && (borrador.detalle || borrador.horas)){
+      ind.classList.add('visible');
+      ind.textContent = '💾 Borrador restaurado';
+    }
+  } catch(e){}
+}
+
+function limpiarBorrador(){
+  localStorage.removeItem(BORRADOR_KEY);
+  const ind = document.getElementById('draftIndicator');
+  if(ind) ind.classList.remove('visible');
+}
+
+let _atajosIniciados = false;
+function inicializarAtajosTeclado(){
+  if(_atajosIniciados) return;
+  _atajosIniciados = true;
+
+  document.addEventListener('keydown', (e) => {
+    if((e.ctrlKey || e.metaKey) && e.key === 'Enter'){
+      const panelRegistrar = document.getElementById('tabRegistrar');
+      if(TAB_ACTIVA === 'registrar' && panelRegistrar && panelRegistrar.style.display !== 'none'){
+        const btn = document.getElementById('btnRegistrar');
+        if(btn && !btn.disabled){
+          e.preventDefault();
+          registrarEnOdoo();
+        }
+      }
+    }
+  });
+
+  ['detalle', 'horas', 'fecha'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el){
+      el.addEventListener('input', guardarBorrador);
+      el.addEventListener('change', guardarBorrador);
+    }
+  });
+}
+
+function mostrarStatus(html, tipo, conToast = true){
   const el = document.getElementById('status');
-  el.className = 'status' + (tipo ? ' ' + tipo : '');
-  el.innerHTML = html;
+  if(el){
+    el.className = 'status' + (tipo ? ' ' + tipo : '');
+    el.innerHTML = html;
+  }
+  if(conToast && html && tipo){
+    mostrarToast(html, tipo);
+  }
 }
 
 let HISTORIAL_ACTUAL = [];
@@ -977,7 +1142,7 @@ async function cargarHistorial(){
   HISTORIAL_ACTUAL = [];
   if(!subtarea){ return; }
 
-  tbody.innerHTML = '<tr><td colspan="3" class="empty">Cargando...</td></tr>';
+  tbody.innerHTML = skeletonTablaFilas(3, 3);
   totalEl.textContent = '';
   try{
     const url = '/api/timesheet/recientes?tarjeta=' + encodeURIComponent(tarjeta) + '&subtarea=' + encodeURIComponent(subtarea);
@@ -1120,6 +1285,7 @@ async function registrarEnOdoo(){
     mostrarStatus('Registrado en Odoo (id ' + data.id + '). <a href="#" onclick="deshacer(' + data.id + '); return false;" style="color:var(--accent)">Deshacer</a>', 'ok');
     document.getElementById('horas').value = '';
     document.getElementById('detalle').value = '';
+    limpiarBorrador();
     await refrescarDatosApp();
   } catch(e){
     mostrarStatus('No se pudo conectar al backend: ' + escapeHTML(e.message), 'err');
@@ -1185,6 +1351,7 @@ async function registrarEnLote(){
   mostrarStatus('Registrados ' + creados + ' días en Odoo.', 'ok');
   document.getElementById('horasLoteInput').value = '';
   document.getElementById('detalle').value = '';
+  limpiarBorrador();
   btn.disabled = false;
   await refrescarDatosApp();
 }
@@ -1316,7 +1483,7 @@ async function consultarDia(){
     return;
   }
 
-  tbody.innerHTML = '<tr><td colspan="4" class="empty">Consultando...</td></tr>';
+  tbody.innerHTML = skeletonTablaFilas(2, 4);
   totalEl.className = 'status';
   totalEl.textContent = '';
 
@@ -1360,10 +1527,15 @@ function renderTablaDia(){
     </tr>`).join('');
 }
 
-function mostrarStatusDia(html, tipo){
+function mostrarStatusDia(html, tipo, conToast = true){
   const el = document.getElementById('statusDia');
-  el.className = 'status' + (tipo ? ' ' + tipo : '');
-  el.innerHTML = html;
+  if(el){
+    el.className = 'status' + (tipo ? ' ' + tipo : '');
+    el.innerHTML = html;
+  }
+  if(conToast && html && tipo){
+    mostrarToast(html, tipo);
+  }
 }
 
 // No se puede "des-borrar" del lado de Odoo: deshacer una eliminación
