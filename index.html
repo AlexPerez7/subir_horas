@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/style.css?v=20260828c">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="favicon.ico" sizes="any">
 <link rel="icon" href="icons/icon-32.png" type="image/png" sizes="32x32">
@@ -141,18 +141,24 @@
       <label for="subtarea">Subtarea</label>
       <select id="subtarea" disabled><option>Selecciona una tarjeta primero</option></select>
 
-      <div class="cronometro-card" id="cronometroBox">
-        <div class="cronometro-header">
-          <div class="cronometro-info">
-            <span class="cronometro-icono" id="cronoIcono">⏱️</span>
-            <span class="cronometro-tiempo" id="cronometroTiempo">00:00:00</span>
-            <span class="cronometro-horas" id="cronometroHoras">(0.00h)</span>
+      <div class="crono-widget" id="cronometroBox">
+        <div class="crono-left">
+          <div class="crono-icon-wrap" id="cronoIconWrap">⏱️</div>
+          <div class="crono-text">
+            <div class="crono-digital" id="cronometroTiempo">00:00:00</div>
+            <div class="crono-sub" id="cronometroHoras">0.00h acumuladas</div>
           </div>
-          <div class="cronometro-acciones">
-            <button type="button" class="btn-crono" id="btnCronoIniciar" onclick="alternarCronometro()">▶ Iniciar</button>
-            <button type="button" class="btn-crono btn-crono-stop" id="btnCronoDetener" onclick="detenerCronometro()" style="display:none;">⏹ Cargar horas</button>
-            <button type="button" class="btn-crono-reset" id="btnCronoReset" onclick="reiniciarCronometro()" style="display:none;" title="Descartar tiempo">✕</button>
-          </div>
+        </div>
+        <div class="crono-actions">
+          <button type="button" class="crono-btn crono-btn-play" id="btnCronoIniciar" onclick="alternarCronometro()">
+            <span id="cronoPlayIcon">▶</span> <span id="cronoPlayText">Iniciar</span>
+          </button>
+          <button type="button" class="crono-btn crono-btn-stop" id="btnCronoDetener" onclick="detenerCronometro()" style="display:none;">
+            <span>⏹ Cargar</span>
+          </button>
+          <button type="button" class="crono-btn-reset" id="btnCronoReset" onclick="reiniciarCronometro()" style="display:none;" title="Descartar tiempo">
+            ✕
+          </button>
         </div>
       </div>
 
@@ -197,7 +203,9 @@
 
       <div class="desc-header">
         <label for="detalle" style="margin:0;">Descripción</label>
-        <button type="button" class="link-btn" onclick="agregarDescripcionFavorita()">+ Añadir favorita</button>
+        <button type="button" class="btn-chip-action" onclick="agregarDescripcionFavorita()">
+          <span class="btn-chip-plus">+</span> Añadir favorita
+        </button>
       </div>
       <textarea id="detalle" placeholder="Ej: revisión de logs de conectores CDE, rotación de credenciales..."></textarea>
       <div class="chips" id="chipsDescripcion"></div>
@@ -374,6 +382,6 @@
 
 <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="true"></div>
 
-<script src="js/app.js"></script>
+<script src="js/app.js?v=20260828c"></script>
 </body>
 </html>

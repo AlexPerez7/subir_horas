@@ -714,9 +714,11 @@ function usarDescripcion(btn){
 }
 
 async function agregarDescripcionFavorita(){
-  const texto = await pedirTexto('Ingresa el texto para tu descripción favorita rápida:', {
+  const detalleActual = document.getElementById('detalle')?.value.trim() || '';
+  const texto = await pedirTexto('Escribe la frase frecuente que deseas guardar en tus favoritas:', {
     titulo: 'Nueva descripción favorita',
-    textoAceptar: 'Agregar'
+    valorInicial: detalleActual,
+    textoAceptar: 'Guardar favorita'
   });
   if(!texto || !texto.trim()) return;
   const favs = obtenerFavoritas();
@@ -1186,27 +1188,27 @@ function actualizarDisplayCronometro(){
   if(estado === 'corriendo' && inicio > 0){
     transcurridoMs = Date.now() - inicio + pausadoMs;
     box.classList.add('corriendo');
-    btnIniciar.textContent = '⏸ Pausar';
-    btnDetener.style.display = '';
-    btnReset.style.display = '';
+    if(btnIniciar) btnIniciar.innerHTML = '<span id="cronoPlayIcon">⏸</span> <span id="cronoPlayText">Pausar</span>';
+    if(btnDetener) btnDetener.style.display = '';
+    if(btnReset) btnReset.style.display = '';
   } else if(estado === 'pausado'){
     transcurridoMs = pausadoMs;
     box.classList.remove('corriendo');
-    btnIniciar.textContent = '▶ Reanudar';
-    btnDetener.style.display = '';
-    btnReset.style.display = '';
+    if(btnIniciar) btnIniciar.innerHTML = '<span id="cronoPlayIcon">▶</span> <span id="cronoPlayText">Reanudar</span>';
+    if(btnDetener) btnDetener.style.display = '';
+    if(btnReset) btnReset.style.display = '';
   } else {
     transcurridoMs = 0;
     box.classList.remove('corriendo');
-    btnIniciar.textContent = '▶ Iniciar';
-    btnDetener.style.display = 'none';
-    btnReset.style.display = 'none';
+    if(btnIniciar) btnIniciar.innerHTML = '<span id="cronoPlayIcon">▶</span> <span id="cronoPlayText">Iniciar</span>';
+    if(btnDetener) btnDetener.style.display = 'none';
+    if(btnReset) btnReset.style.display = 'none';
   }
 
   const segundos = Math.floor(transcurridoMs / 1000);
   tiempoEl.textContent = formatoTiempo(segundos);
   const decimalHoras = (segundos / 3600).toFixed(2);
-  horasEl.textContent = '(' + decimalHoras + 'h)';
+  if(horasEl) horasEl.textContent = decimalHoras + 'h acumuladas';
 }
 
 function iniciarCronometroLoop(){
