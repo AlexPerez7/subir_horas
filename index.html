@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=20260828d">
+<link rel="stylesheet" href="css/style.css?v=20260901a">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="favicon.ico" sizes="any">
 <link rel="icon" href="icons/icon-32.png" type="image/png" sizes="32x32">
@@ -26,16 +26,25 @@
 </head>
 <body>
 
-<div id="loginBox" class="login-wrap" style="display:none;">
-  <span class="eyebrow">GER_Produccion Varios NF</span>
-  <h1>Registro de horas</h1>
-  <div class="card" style="margin-top:20px;">
-    <label for="loginUsername">Usuario</label>
-    <input type="text" id="loginUsername" autocomplete="username">
-    <label for="loginPassword">Contraseña</label>
-    <input type="password" id="loginPassword" autocomplete="current-password">
-    <button class="primary" id="btnLogin" onclick="iniciarSesion()">Ingresar</button>
-    <div class="status" id="loginStatus" aria-live="polite"></div>
+<div id="loginBox" class="login-page" style="display:none;">
+  <div class="login-card">
+    <div class="login-brand">
+      <img class="login-logo" src="icons/logo/isotipo.png" alt="Assertiva">
+      <span class="eyebrow">GER_Produccion Varios NF</span>
+    </div>
+    <h1>Registro de horas</h1>
+    <p class="login-sub">Ingresa con tu usuario para cargar y revisar tus horas.</p>
+    <form class="login-form" onsubmit="event.preventDefault(); iniciarSesion();">
+      <label for="loginUsername">Usuario</label>
+      <input type="text" id="loginUsername" autocomplete="username" autocapitalize="none" spellcheck="false">
+      <label for="loginPassword">Contraseña</label>
+      <div class="login-pass">
+        <input type="password" id="loginPassword" autocomplete="current-password">
+        <button type="button" class="login-pass-toggle" id="btnVerPass" onclick="toggleLoginPassword()" aria-label="Mostrar contraseña">Ver</button>
+      </div>
+      <button class="primary" id="btnLogin" type="submit">Ingresar</button>
+      <div class="status" id="loginStatus" aria-live="polite"></div>
+    </form>
   </div>
 </div>
 
@@ -361,6 +370,6 @@
 
 <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="true"></div>
 
-<script src="js/app.js?v=20260828d"></script>
+<script src="js/app.js?v=20260901a"></script>
 </body>
 </html>

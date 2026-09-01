@@ -93,7 +93,7 @@ function jsAttr(valor){
 async function inicializar(){
   if(!getToken()){
     document.getElementById('appRoot').style.display = 'none';
-    document.getElementById('loginBox').style.display = 'block';
+    document.getElementById('loginBox').style.display = 'flex';
     return;
   }
 
@@ -104,7 +104,7 @@ async function inicializar(){
     // Backend caído o inalcanzable: mostramos el login igual, con el
     // motivo, en vez de dejar la página en blanco.
     document.getElementById('appRoot').style.display = 'none';
-    document.getElementById('loginBox').style.display = 'block';
+    document.getElementById('loginBox').style.display = 'flex';
     const statusEl = document.getElementById('loginStatus');
     statusEl.className = 'status err';
     statusEl.textContent = 'No se pudo conectar al backend (' + e.message + '). Prueba reintentar en unos segundos.';
@@ -113,7 +113,7 @@ async function inicializar(){
   if(res.status === 401){
     clearToken();
     document.getElementById('appRoot').style.display = 'none';
-    document.getElementById('loginBox').style.display = 'block';
+    document.getElementById('loginBox').style.display = 'flex';
     return;
   }
   const yo = await res.json();
@@ -478,7 +478,7 @@ function cerrarSesion(){
   // SESSION_LIFETIME_HORAS en el backend).
   clearToken();
   document.getElementById('appRoot').style.display = 'none';
-  document.getElementById('loginBox').style.display = 'block';
+  document.getElementById('loginBox').style.display = 'flex';
   document.getElementById('loginUsername').value = '';
   document.getElementById('loginPassword').value = '';
   document.getElementById('loginStatus').textContent = '';
@@ -1836,8 +1836,14 @@ function irACargarFecha(fechaIso){
   document.getElementById('subtarea').focus();
 }
 
-document.getElementById('loginPassword').addEventListener('keydown', (e) => {
-  if(e.key === 'Enter') iniciarSesion();
-});
+function toggleLoginPassword(){
+  const input = document.getElementById('loginPassword');
+  const btn = document.getElementById('btnVerPass');
+  const oculto = input.type === 'password';
+  input.type = oculto ? 'text' : 'password';
+  btn.textContent = oculto ? 'Ocultar' : 'Ver';
+  btn.setAttribute('aria-label', oculto ? 'Ocultar contraseña' : 'Mostrar contraseña');
+  input.focus();
+}
 
 inicializar();
