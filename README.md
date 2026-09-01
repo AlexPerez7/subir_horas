@@ -102,8 +102,14 @@ El backend le habla a Supabase por su **API REST** (HTTPS/443, paquete `supabase
        accion TEXT NOT NULL,
        detalle TEXT
    );
+
+   -- Row Level Security: activado sin políticas => nadie puede leer/escribir
+   -- estas tablas por la API REST con la anon key. El backend usa la
+   -- service_role key, que bypassea RLS, así que no cambia nada del flujo.
+   ALTER TABLE public.usuarios  ENABLE ROW LEVEL SECURITY;
+   ALTER TABLE public.auditoria ENABLE ROW LEVEL SECURITY;
    ```
-   Es seguro volver a correrlo (`IF NOT EXISTS`) — si ya tenías estas tablas de una migración anterior, no hace nada.
+   Es seguro volver a correrlo (`IF NOT EXISTS` / `ENABLE ROW LEVEL SECURITY` es idempotente) — si ya tenías estas tablas de una migración anterior, solo agrega el RLS.
 3. **Sacar las credenciales de la API:** **Project Settings → API**. Copia la **Project URL** (`SUPABASE_URL`) y la **`service_role` key** (`SUPABASE_SERVICE_ROLE_KEY`) — **no** la `anon`/`public` key.
 4. Esas dos van en tus variables de entorno locales y en las de producción.
 
@@ -382,6 +388,7 @@ Los usuarios ya no viven en un archivo local sino en Postgres, en Supabase — n
 ## Seguridad
 
 - El `.env` contiene un token de API real con permisos de escritura sobre Odoo, y la `SUPABASE_SERVICE_ROLE_KEY` (acceso total a la base, bypassea Row Level Security). **Nunca** se commitea, ni se comparte por chat/capturas de pantalla sin tapar esos valores.
+- Las tablas `usuarios` y `auditoria` tienen **Row Level Security activado sin políticas**: con eso, la API REST de Supabase con la `anon` key (pública) no puede leer ni escribir nada. Solo el backend, que usa la `service_role` key (bypassea RLS), accede a los datos. Si Supabase avisa `rls_disabled_in_public` en **Advisors → Security**, correr el `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` del bloque SQL de arriba.
 - Si el token de Odoo llegara a exponerse accidentalmente, hay que **rotarlo** en Odoo lo antes posible. Si se expone `SUPABASE_SERVICE_ROLE_KEY`, regenerala desde el dashboard de Supabase (**Project Settings → API → Reset service_role key**).
 - Las contraseñas de los usuarios de la app se guardan **hasheadas** (`werkzeug.security`), nunca en texto plano, en la tabla `usuarios` de Postgres.
 - CORS en el backend está restringido a los orígenes listados en `FRONTEND_ORIGINS` (no `CORS(app)` abierto). Si en algún momento agregas otro dominio desde el que se sirva el frontend, hay que sumarlo ahí.
