@@ -1836,13 +1836,18 @@ function irACargarFecha(fechaIso){
   document.getElementById('subtarea').focus();
 }
 
+const _ICONO_OJO = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>';
+const _ICONO_OJO_TACHADO = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.7 5.1A10.9 10.9 0 0 1 12 5c6.5 0 10 7 10 7a17.6 17.6 0 0 1-3.3 4.2M6.6 6.6A17.6 17.6 0 0 0 2 12s3.5 7 10 7a10.7 10.7 0 0 0 5.4-1.4M9.9 9.9a3 3 0 0 0 4.2 4.2"/><path d="m2 2 20 20"/></svg>';
+
 function toggleLoginPassword(){
   const input = document.getElementById('loginPassword');
   const btn = document.getElementById('btnVerPass');
   const oculto = input.type === 'password';
   input.type = oculto ? 'text' : 'password';
-  btn.textContent = oculto ? 'Ocultar' : 'Ver';
-  btn.setAttribute('aria-label', oculto ? 'Ocultar contraseña' : 'Mostrar contraseña');
+  btn.innerHTML = oculto ? _ICONO_OJO_TACHADO : _ICONO_OJO;
+  const etiqueta = oculto ? 'Ocultar contraseña' : 'Mostrar contraseña';
+  btn.setAttribute('aria-label', etiqueta);
+  btn.setAttribute('title', etiqueta);
   input.focus();
 }
 
