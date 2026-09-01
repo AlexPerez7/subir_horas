@@ -12,7 +12,7 @@ También vive acá el bloqueo tras intentos fallidos de login (en memoria del pr
 
 import time
 
-from flask import g, jsonify
+from flask import g, jsonify, request
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
 from . import config
@@ -50,6 +50,17 @@ def requiere_admin():
 # cero.
 INTENTOS_MAXIMOS = 5
 BLOQUEO_SEGUNDOS = 300
+
+
+def ip_cliente():
+    """IP del cliente para el bloqueo por intentos fallidos. El backend
+    corre detrás de un proxy (Tailscale Funnel / Render / gunicorn en
+    127.0.0.1), así que la IP real viene en X-Forwarded-For, no en
+    request.remote_addr."""
+    xff = request.headers.get("X-Forwarded-For", "")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.remote_addr or "desconocida"
 
 
 def _segundos_bloqueado(intentos_dict, clave):

@@ -139,7 +139,7 @@ python -m http.server 5500
 
 Y abrir `http://127.0.0.1:5500/index.html`. En `.env` local, `FRONTEND_ORIGINS` tiene que incluir `http://127.0.0.1:5500`.
 
-En `js/app.js`, cambia temporalmente `API_BASE` a `http://127.0.0.1:5000` mientras desarrollas (y vuelve a poner la URL de Tailscale (`https://*.ts.net`) antes de publicar).
+En `js/app.js`, cambia temporalmente `API_BASE` a `http://127.0.0.1:5000` mientras desarrollas (y vuelve a poner la URL pública de tu backend antes de publicar — la de Render.com `https://*.onrender.com` o la de tu VM vía Tailscale Funnel `https://*.ts.net`, según dónde lo tengas desplegado).
 
 Cualquier cambio en `index.html` se ve recargando la pestaña; cambios en `backend_odoo.py` requieren reiniciar el script.
 
@@ -260,7 +260,7 @@ Atrapa errores tontos (typos, paréntesis sin cerrar) y de lógica (ej. un cambi
 
 ## Publicar el frontend en GitHub Pages
 
-1. Edita `js/app.js`: reemplaza la constante `API_BASE` (primera línea) por la URL real de tu backend en Tailscale Funnel (`https://tu-maquina.tu-tailnet.ts.net`, sin barra final).
+1. Edita `js/app.js`: reemplaza la constante `API_BASE` (primera línea) por la URL real de tu backend, sin barra final — la de Render.com (`https://tu-app.onrender.com`) o la de tu VM vía Tailscale Funnel (`https://tu-maquina.tu-tailnet.ts.net`), según dónde lo tengas desplegado. Tiene que coincidir con el host real: si el frontend apunta a un backend que ya no está corriendo, el login falla sin un error claro.
 2. Commitea y pushea.
 3. En GitHub: **Settings → Pages → Build and deployment → Deploy from a branch**, elige `main` y carpeta `/ (root)`.
 4. GitHub te da una URL tipo `https://tu-usuario.github.io/subir_horas/`. Cópiala en `FRONTEND_ORIGINS` en el `.env` de la VM y reinicia el servicio (`sudo systemctl restart subir-horas`) para que el CORS la acepte.

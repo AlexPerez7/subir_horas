@@ -27,14 +27,12 @@ jobs:
   respaldo:
     runs-on: ubuntu-latest
     steps:
-      - name: Exportar tablas desde Supabase
+      - name: Exportar auditoria desde Supabase
         run: |
-          for TABLA in auditoria; do
-            curl -fsS "${{ secrets.SUPABASE_URL }}/rest/v1/$TABLA?select=*" \
-              -H "apikey: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
-              -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
-              -o "$TABLA.json"
-          done
+          curl -fsS "${{ secrets.SUPABASE_URL }}/rest/v1/auditoria?select=*" \
+            -H "apikey: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -o "auditoria.json"
 
       - name: Subir como artifact
         uses: actions/upload-artifact@v4
