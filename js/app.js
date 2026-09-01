@@ -20,8 +20,10 @@ function aplicarLabelsTema(){
   const dark = temaActual() === 'dark';
   const texto = dark ? 'Modo oscuro' : 'Modo claro';
   document.querySelectorAll('.toggle-label').forEach(el => { el.textContent = texto; });
+  // El sidebar es azul marino oscuro en ambos temas (Assertiva Design
+  // System), asi que el isotipo siempre va en su version blanca.
   const logo = document.getElementById('sidebarLogo');
-  if(logo) logo.src = dark ? 'icons/logo/isotipo-blanco.png' : 'icons/logo/isotipo.png';
+  if(logo) logo.src = 'icons/logo/isotipo-blanco.png';
 }
 
 function alternarTema(){

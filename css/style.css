@@ -2,9 +2,16 @@
   --navy-900: #002142;
   --navy-800: #0a3155;
   --sky-500: #14baed;
+  --sky-100: #e4f7fd;
+  --sky-050: #f2fbfe;
   --ok: #2f8f5b;
   --warn: #a3690a;
   --err: #b3261e;
+
+  /* Bordes/texto sobre el sidebar azul marino (Assertiva Design System) */
+  --on-navy-border: rgba(255,255,255,.12);
+  --on-navy-hover: rgba(255,255,255,.08);
+  --radius-pill: 999px;
 
   --surface-page: #f7f9fa;
   --surface-panel: #ffffff;
@@ -18,8 +25,8 @@
   --chip-bg: #f2fbfe;
   --chip-border: #e4f7fd;
   --track-bg: #eef1f3;
-  --avatar-bg: #002142;
-  --avatar-text: #ffffff;
+  --avatar-bg: #14baed;
+  --avatar-text: #002142;
   --err-bg: #fbeceb;
   --err-border: #f0cfcc;
   --warn-bg: #fbf1de;
@@ -190,8 +197,8 @@ select:disabled{ opacity:.5; }
 
 .chips{ display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
 .chip{
-  background:var(--track-bg); border:1px solid var(--border-panel); color:var(--text-muted);
-  font-size:11.5px; padding:4px 10px; border-radius:14px; cursor:pointer; font-family:var(--sans);
+  background:var(--surface-panel); border:1px solid var(--border-input); color:var(--text-body);
+  font-size:11.5px; padding:5px 12px; border-radius:var(--radius-pill); cursor:pointer; font-family:var(--sans);
   max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   transition:color .15s ease, border-color .15s ease;
 }
@@ -340,30 +347,43 @@ html[data-theme="dark"] .toggle-knob{ left:16px; background:var(--sky-500); }
   #appRoot{ display:flex; align-items:flex-start; }
 
   .sidebar{
-    display:flex; flex-direction:column; gap:28px;
-    position:sticky; top:0; height:100vh; width:230px; flex-shrink:0;
-    background:var(--surface-panel); border-right:1px solid var(--border-panel);
-    padding:28px 16px;
+    display:flex; flex-direction:column; gap:24px;
+    position:sticky; top:0; height:100vh; width:248px; flex-shrink:0;
+    background:var(--navy-900); border-right:1px solid var(--on-navy-border);
+    padding:24px 16px;
   }
-  .sidebar-brand{ padding:0 10px; display:flex; flex-direction:column; gap:16px; }
-  .sidebar-logo{ height:26px; width:auto; align-self:flex-start; object-fit:contain; flex-shrink:0; }
-  .sidebar-brand h1{ font-size:17px; font-weight:700; margin:0; color:var(--text-heading); }
+  .sidebar-brand{
+    padding:0 6px 20px; display:flex; flex-direction:column; gap:12px;
+    border-bottom:1px solid var(--on-navy-border);
+  }
+  .sidebar-logo{ height:28px; width:auto; align-self:flex-start; object-fit:contain; flex-shrink:0; }
+  .sidebar-brand h1{ font-size:17px; font-weight:700; margin:0; color:#fff; line-height:1.3; }
   .sidebar-brand .eyebrow{
-    font-family:var(--sans); font-size:11px; font-weight:600; color:var(--sky-500);
-    text-transform:uppercase; letter-spacing:1.1px; display:block; margin-bottom:6px;
+    font-family:var(--sans); font-size:11px; font-weight:700; color:var(--sky-100);
+    text-transform:uppercase; letter-spacing:.9px; display:block; margin-bottom:4px;
   }
 
-  .sidebar-nav{ display:flex; flex-direction:column; gap:2px; }
+  .sidebar-nav{ display:flex; flex-direction:column; gap:4px; }
   .sidebar-nav button{
     display:flex; align-items:center; gap:10px; width:100%; text-align:left;
-    background:none; border:none; border-radius:8px; padding:10px 12px;
-    color:var(--text-muted); font-family:var(--sans); font-size:14px; cursor:pointer;
+    background:transparent; border:none; border-radius:var(--radius-md, 8px); padding:10px 14px;
+    color:#fff; font-family:var(--sans); font-size:14px; font-weight:500; cursor:pointer;
+    transition:background-color .15s ease, color .15s ease;
   }
-  .sidebar-nav button:hover{ background:var(--nav-active-bg); color:var(--text-heading); }
-  .sidebar-nav button.activo{ background:var(--nav-active-bg); color:var(--text-heading); font-weight:600; }
+  .sidebar-nav button:hover{ background:var(--on-navy-hover); }
+  .sidebar-nav button.activo{ background:var(--sky-500); color:var(--navy-900); font-weight:600; }
   .sidebar-nav .tabbar-icono{ font-size:15px; line-height:1; width:18px; text-align:center; }
 
-  .sidebar-footer{ margin-top:auto; padding:0 10px; }
+  .sidebar-footer{
+    margin-top:auto; padding-top:16px; display:flex; flex-direction:column; gap:12px;
+    border-top:1px solid var(--on-navy-border);
+  }
+  .sidebar-copy{ font-size:11px; color:var(--sky-100); padding:0 4px; }
+  .sidebar .toggle-tema{ border-color:var(--on-navy-border); color:#fff; }
+  .sidebar .toggle-tema:hover{ border-color:rgba(255,255,255,.28); background:var(--on-navy-hover); }
+  .sidebar .toggle-track{ background:rgba(255,255,255,.16); }
+  .sidebar .toggle-knob{ background:#fff; }
+  .sidebar .toggle-label{ color:var(--sky-100); }
 
   .header-brand{ display:none; }
   /* Antes usaba --surface-panel (el mismo tono "tarjeta" del sidebar):
