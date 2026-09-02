@@ -209,11 +209,11 @@ select:disabled{ opacity:.5; }
 .chip.chip-danger:hover{ border-color:var(--err); color:var(--err); }
 
 button.primary{
-  margin-top:18px; width:100%; background:var(--navy-900); color:#fff; border:1px solid var(--navy-900);
-  padding:11px; border-radius:8px; font-weight:500; font-size:14px; cursor:pointer;
+  margin-top:18px; width:100%; background:var(--sky-500); color:var(--navy-900); border:1px solid var(--sky-500);
+  padding:11px; border-radius:8px; font-weight:600; font-size:14px; cursor:pointer;
   font-family:var(--sans); transition:filter .12s ease, transform .08s ease;
 }
-button.primary:hover{ filter:brightness(1.15); }
+button.primary:hover{ filter:brightness(.93); }
 button.primary:active{ transform:scale(.98); }
 button.primary:disabled{ opacity:.5; cursor:not-allowed; }
 button.ghost{
@@ -528,17 +528,13 @@ html[data-theme="dark"] .toggle-knob{ left:16px; background:var(--sky-500); }
 .kbd-hint {
   display: inline-flex;
   align-items: center;
-  background: rgba(255, 255, 255, 0.18);
-  color: #ffffff;
+  background: rgba(0, 33, 66, 0.14);
+  color: var(--navy-900);
   padding: 2px 7px;
   border-radius: 4px;
   font-size: 11px;
   font-family: var(--mono);
   letter-spacing: 0.5px;
-}
-html[data-theme="dark"] .kbd-hint {
-  background: rgba(0, 0, 0, 0.28);
-  color: var(--text-heading);
 }
 
 /* Skeletons Shimmer */
