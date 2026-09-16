@@ -198,37 +198,6 @@ async function inicializar(){
   restaurarBorrador();
   inicializarAtajosTeclado();
   alCambiarFechaRegistro();
-  initMagneticButtons();
-}
-
-function initMagneticButtons() {
-  if (typeof gsap === 'undefined') return;
-  const magneticEls = document.querySelectorAll('button.primary, button.ghost, .avatar-btn');
-  magneticEls.forEach(el => {
-    el.addEventListener('mousemove', (e) => {
-      const rect = el.getBoundingClientRect();
-      const x = e.clientX - rect.left - rect.width / 2;
-      const y = e.clientY - rect.top - rect.height / 2;
-      
-      gsap.to(el, {
-        x: x * 0.2,
-        y: y * 0.2,
-        duration: 0.4,
-        ease: 'power2.out',
-        overwrite: 'auto'
-      });
-    });
-    
-    el.addEventListener('mouseleave', () => {
-      gsap.to(el, {
-        x: 0,
-        y: 0,
-        duration: 0.4,
-        ease: 'expo.out',
-        overwrite: 'auto'
-      });
-    });
-  });
 }
 
 // Recarga en paralelo todos los paneles afectados tras crear, editar o borrar entradas
