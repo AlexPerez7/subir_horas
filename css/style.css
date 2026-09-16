@@ -218,9 +218,10 @@ select:disabled{ opacity:.5; }
   background:var(--surface-panel); border:1px solid var(--border-input); color:var(--text-body);
   font-size:11.5px; padding:5px 12px; border-radius:var(--radius-pill); cursor:pointer; font-family:var(--sans);
   max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-  transition:color .15s ease, border-color .15s ease;
+  transition:transform 0.15s ease, color .15s ease, border-color .15s ease;
 }
-.chip:hover{ color:var(--text-heading); border-color:var(--border-input); }
+.chip:hover{ color:var(--text-heading); border-color:var(--border-input); transform: translateY(-1px); }
+.chip:active{ transform: scale(0.96); transition-duration: 0.05s; }
 .chip.chip-sky{ background:var(--chip-bg); border-color:var(--chip-border); color:var(--text-heading); max-width:220px; }
 .chip.chip-sky:hover{ color:var(--text-heading); border-color:var(--sky-500); }
 .chip.chip-danger{ background:var(--err-bg); border-color:var(--err-border); color:var(--err); font-family:var(--mono); border-radius:8px; }
@@ -234,7 +235,11 @@ button.primary{
   box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
 }
 button.primary:hover{ filter:brightness(.95); transform: translateY(-2px) scale(1.02); box-shadow: 0 6px 16px rgba(99, 102, 241, 0.25); }
-button.primary:active{ transform: translateY(0) scale(.96); box-shadow: 0 2px 8px rgba(99, 102, 241, 0.15); }
+button.primary:active{
+  transform: translateY(0) scale(.97);
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.15);
+  transition: transform 0.1s ease-out, filter 0.1s ease, box-shadow 0.1s ease;
+}
 button.primary:disabled{ opacity:.5; cursor:not-allowed; transform:none; box-shadow:none; }
 button.ghost{
   margin-top:8px; width:100%; background:transparent; color:var(--text-heading); border:1px solid var(--border-input);
@@ -242,7 +247,10 @@ button.ghost{
   transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s ease, border-color 0.2s ease;
 }
 button.ghost:hover{ background:var(--track-bg); border-color:var(--sky-500); transform: translateY(-1px) scale(1.01); }
-button.ghost:active{ transform: translateY(0) scale(.97); }
+button.ghost:active{
+  transform: translateY(0) scale(.97);
+  transition: transform 0.1s ease-out, background-color 0.1s ease, border-color 0.1s ease;
+}
 
 .tabla-scroll{ overflow-x:auto; -webkit-overflow-scrolling:touch; }
 table{ width:100%; border-collapse:collapse; font-size:13px; }

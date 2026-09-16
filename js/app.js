@@ -223,8 +223,8 @@ function initMagneticButtons() {
       gsap.to(el, {
         x: 0,
         y: 0,
-        duration: 0.7,
-        ease: 'elastic.out(1, 0.3)',
+        duration: 0.4,
+        ease: 'expo.out',
         overwrite: 'auto'
       });
     });
@@ -300,7 +300,7 @@ function mostrarTab(nombre, forceAnimation = false){
       if (elementsToAnimate.length > 0) {
         gsap.fromTo(elementsToAnimate, 
           { opacity: 0, y: 15 },
-          { opacity: 1, y: 0, duration: 0.4, stagger: 0.03, ease: "power2.out", overwrite: "auto" }
+          { opacity: 1, y: 0, duration: 0.4, stagger: 0.03, ease: "expo.out", overwrite: "auto" }
         );
       }
     }
@@ -1459,8 +1459,8 @@ async function registrarEnOdoo(){
     const originalText = btnTextEl ? btnTextEl.innerHTML : 'Registrar en Odoo';
     if(btnTextEl) btnTextEl.innerHTML = '✔️ Registrado';
     if (typeof gsap !== 'undefined') {
-      gsap.fromTo(btn, { scale: 1 }, { scale: 1.05, duration: 0.15, yoyo: true, repeat: 1 });
-      gsap.to(btn, { backgroundColor: '#10b981', duration: 0.3 }); // Emerald Green
+      gsap.fromTo(btn, { scale: 0.95 }, { scale: 1, duration: 0.5, ease: "elastic.out(1, 0.4)" });
+      gsap.to(btn, { backgroundColor: '#10b981', duration: 0.2 }); // Emerald Green
     }
     setTimeout(() => {
       if(btnTextEl) btnTextEl.innerHTML = originalText;
@@ -1538,8 +1538,8 @@ async function registrarEnLote(){
   const originalText = btnTextEl ? btnTextEl.innerHTML : 'Registrar en Odoo';
   if(btnTextEl) btnTextEl.innerHTML = '✔️ Registrado';
   if (typeof gsap !== 'undefined') {
-    gsap.fromTo(btn, { scale: 1 }, { scale: 1.05, duration: 0.15, yoyo: true, repeat: 1 });
-    gsap.to(btn, { backgroundColor: '#10b981', duration: 0.3 });
+    gsap.fromTo(btn, { scale: 0.95 }, { scale: 1, duration: 0.5, ease: "elastic.out(1, 0.4)" });
+    gsap.to(btn, { backgroundColor: '#10b981', duration: 0.2 });
   }
   setTimeout(() => {
     if(btnTextEl) btnTextEl.innerHTML = originalText;
