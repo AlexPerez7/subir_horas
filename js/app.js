@@ -110,10 +110,15 @@ async function inicializar(){
     statusEl.textContent = 'No se pudo conectar al backend (' + e.message + '). Prueba reintentar en unos segundos.';
     return;
   }
-  if(res.status === 401){
-    clearToken();
+  if(!res.ok){
+    if(res.status === 401){
+      clearToken();
+    }
     document.getElementById('appRoot').style.display = 'none';
     document.getElementById('loginBox').style.display = 'block';
+    const statusEl = document.getElementById('loginStatus');
+    statusEl.className = 'status err';
+    statusEl.textContent = res.status === 401 ? 'Sesión expirada. Vuelve a iniciar sesión.' : 'El servidor devolvió un error (' + res.status + '). Intenta de nuevo.';
     return;
   }
   const yo = await res.json();
