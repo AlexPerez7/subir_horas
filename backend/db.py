@@ -71,6 +71,15 @@ def obtener_usuario(username):
     return res.data[0] if res.data else None
 
 
+def ping():
+    """Hace una consulta rápida para mantener activa la base de datos."""
+    try:
+        _client.table("usuarios").select("username").limit(1).execute()
+        return True
+    except Exception:
+        return False
+
+
 def listar_usuarios():
     res = _client.table("usuarios").select("username,tarjeta,es_admin").order("username").execute()
     return res.data

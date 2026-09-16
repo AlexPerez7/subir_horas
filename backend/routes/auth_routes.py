@@ -24,7 +24,12 @@ _HASH_DUMMY = generate_password_hash("password-que-nunca-se-usa")
 
 @bp.route("/")
 def health():
-    return jsonify({"status": "ok", "service": "registro-horas-backend"})
+    db_ok = db.ping()
+    return jsonify({
+        "status": "ok", 
+        "service": "registro-horas-backend", 
+        "db_ok": db_ok
+    })
 
 
 @bp.route("/api/login", methods=["POST"])
