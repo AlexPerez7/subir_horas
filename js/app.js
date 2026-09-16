@@ -97,7 +97,7 @@ function initVanta() {
   if (typeof VANTA !== 'undefined' && !vantaEffect) {
     vantaEffect = VANTA.NET({
       el: "#loginBox", mouseControls: true, touchControls: true,
-      color: 0x14baed, backgroundColor: 0x002142, points: 12, maxDistance: 22, spacing: 18
+      color: 0x6366f1, backgroundColor: 0x09090b, points: 12, maxDistance: 22, spacing: 18
     });
   }
 }

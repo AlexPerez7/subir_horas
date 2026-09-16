@@ -1,12 +1,12 @@
 :root{
-  --navy-900: #002142;
-  --navy-800: #0a3155;
-  --sky-500: #14baed;
-  --sky-100: #e4f7fd;
-  --sky-050: #f2fbfe;
-  --ok: #2f8f5b;
-  --warn: #a3690a;
-  --err: #b3261e;
+  --navy-900: #09090b; /* zinc-950 */
+  --navy-800: #18181b; /* zinc-900 */
+  --sky-500: #6366f1;  /* indigo-500 */
+  --sky-100: #e0e7ff;  /* indigo-100 */
+  --sky-050: #eef2ff;  /* indigo-50 */
+  --ok: #10b981;       /* emerald-500 */
+  --warn: #f59e0b;     /* amber-500 */
+  --err: #ef4444;      /* red-500 */
 
   /* Bordes/texto sobre el sidebar azul marino (Assertiva Design System) */
   --on-navy-border: rgba(255,255,255,.12);
@@ -25,8 +25,8 @@
   --chip-bg: #f2fbfe;
   --chip-border: #e4f7fd;
   --track-bg: #eef1f3;
-  --avatar-bg: #14baed;
-  --avatar-text: #002142;
+  --avatar-bg: var(--sky-500);
+  --avatar-text: #ffffff;
   --err-bg: #fbeceb;
   --err-border: #f0cfcc;
   --warn-bg: #fbf1de;
@@ -48,24 +48,24 @@
    js/app.js setea desde localStorage antes de pintar (ver script inline
    en el <head> de index.html) para evitar flash del tema equivocado. */
 html[data-theme="dark"]{
-  --surface-page: #0b1620;
-  --surface-panel: #102844;
+  --surface-page: #09090b; /* zinc-950 */
+  --surface-panel: #18181b; /* zinc-900 */
   --border-panel: rgba(255,255,255,.10);
   --border-input: rgba(255,255,255,.20);
   --text-heading: #ffffff;
-  --text-body: #e7eef3;
-  --text-muted: #9db3c4;
-  --text-faint: #7e93a3;
-  --nav-active-bg: rgba(20,186,237,.16);
-  --chip-bg: rgba(20,186,237,.14);
-  --chip-border: rgba(20,186,237,.30);
+  --text-body: #e4e4e7; /* zinc-200 */
+  --text-muted: #a1a1aa; /* zinc-400 */
+  --text-faint: #71717a; /* zinc-500 */
+  --nav-active-bg: rgba(99,102,241,.16);
+  --chip-bg: rgba(99,102,241,.14);
+  --chip-border: rgba(99,102,241,.30);
   --track-bg: rgba(255,255,255,.08);
-  --avatar-bg: #14baed;
-  --avatar-text: #002142;
-  --err-bg: rgba(179,38,30,.18);
-  --err-border: rgba(179,38,30,.4);
-  --warn-bg: rgba(163,105,10,.18);
-  --warn-border: rgba(163,105,10,.4);
+  --avatar-bg: var(--sky-500);
+  --avatar-text: #ffffff;
+  --err-bg: rgba(239,68,68,.18);
+  --err-border: rgba(239,68,68,.4);
+  --warn-bg: rgba(245,158,11,.18);
+  --warn-border: rgba(245,158,11,.4);
 
   /* --ok/--warn/--err (definidos arriba en :root) son tonos pensados para
      texto sobre fondos claros - en oscuro, ese mismo rojo/ámbar/verde
@@ -227,14 +227,14 @@ select:disabled{ opacity:.5; }
 .chip.chip-danger:hover{ border-color:var(--err); color:var(--err); }
 
 button.primary{
-  margin-top:18px; width:100%; background:var(--sky-500); color:var(--navy-900); border:1px solid var(--sky-500);
+  margin-top:18px; width:100%; background:var(--sky-500); color:#ffffff; border:1px solid var(--sky-500);
   padding:12px; border-radius:10px; font-weight:600; font-size:var(--font-size-sm); cursor:pointer;
   font-family:var(--sans); 
   transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.2s ease, box-shadow 0.2s ease;
-  box-shadow: 0 4px 12px rgba(20, 186, 237, 0.15);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
 }
-button.primary:hover{ filter:brightness(.95); transform: translateY(-2px) scale(1.02); box-shadow: 0 6px 16px rgba(20, 186, 237, 0.25); }
-button.primary:active{ transform: translateY(0) scale(.96); box-shadow: 0 2px 8px rgba(20, 186, 237, 0.15); }
+button.primary:hover{ filter:brightness(.95); transform: translateY(-2px) scale(1.02); box-shadow: 0 6px 16px rgba(99, 102, 241, 0.25); }
+button.primary:active{ transform: translateY(0) scale(.96); box-shadow: 0 2px 8px rgba(99, 102, 241, 0.15); }
 button.primary:disabled{ opacity:.5; cursor:not-allowed; transform:none; box-shadow:none; }
 button.ghost{
   margin-top:8px; width:100%; background:transparent; color:var(--text-heading); border:1px solid var(--border-input);
@@ -274,8 +274,8 @@ tbody tr:hover td{ background:var(--track-bg); }
   min-height:100vh; min-height:100dvh; display:flex; align-items:center; justify-content:center;
   padding:24px;
   background:
-    radial-gradient(1100px 520px at 15% -10%, rgba(20,186,237,.22), transparent 60%),
-    radial-gradient(900px 500px at 110% 120%, rgba(20,186,237,.14), transparent 55%),
+    radial-gradient(1100px 520px at 15% -10%, rgba(99,102,241,.22), transparent 60%),
+    radial-gradient(900px 500px at 110% 120%, rgba(99,102,241,.14), transparent 55%),
     linear-gradient(160deg, var(--navy-900), var(--navy-800) 70%);
 }
 .login-card{
@@ -288,7 +288,7 @@ tbody tr:hover td{ background:var(--track-bg); }
   animation:login-in .5s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 html[data-theme="dark"] .login-card {
-  background: rgba(16, 40, 68, 0.7);
+  background: rgba(24, 24, 27, 0.7);
 }
 @keyframes login-in{ from{ opacity:0; transform:translateY(12px) scale(.98); } to{ opacity:1; transform:none; } }
 .login-brand{ display:flex; align-items:center; gap:10px; margin-bottom:18px; }
