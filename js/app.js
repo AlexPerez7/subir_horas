@@ -1529,8 +1529,6 @@ async function registrarEnLote(){
   }
 
   // Success Animation
-  const btnTextEl = document.getElementById('btnRegistrarTexto');
-  const originalText = btnTextEl ? btnTextEl.innerHTML : 'Registrar en Odoo';
   if(btnTextEl) btnTextEl.innerHTML = '✔️ Registrado';
   if (typeof gsap !== 'undefined') {
     gsap.fromTo(btn, { scale: 0.95 }, { scale: 1, duration: 0.5, ease: "elastic.out(1, 0.4)" });
