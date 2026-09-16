@@ -92,10 +92,24 @@ function jsAttr(valor){
   return JSON.stringify(String(valor)).replace(/"/g, '&quot;');
 }
 
+let vantaEffect = null;
+function initVanta() {
+  if (typeof VANTA !== 'undefined' && !vantaEffect) {
+    vantaEffect = VANTA.NET({
+      el: "#loginBox", mouseControls: true, touchControls: true,
+      color: 0x14baed, backgroundColor: 0x002142, points: 12, maxDistance: 22, spacing: 18
+    });
+  }
+}
+function destroyVanta() {
+  if (vantaEffect) { vantaEffect.destroy(); vantaEffect = null; }
+}
+
 async function inicializar(){
   if(!getToken()){
     document.getElementById('appRoot').style.display = 'none';
     document.getElementById('loginBox').style.display = 'flex';
+    initVanta();
     return;
   }
 
@@ -128,6 +142,7 @@ async function inicializar(){
   MI_TARJETA = yo.tarjeta;
 
   document.getElementById('loginBox').style.display = 'none';
+  destroyVanta();
   // '' (no 'block'): un valor inline fijo le ganaría en especificidad al
   // "display:flex" que el media query de desktop le pone a #appRoot para
   // el layout con sidebar, y la app quedaría en blanco en pantallas anchas.
@@ -183,6 +198,37 @@ async function inicializar(){
   restaurarBorrador();
   inicializarAtajosTeclado();
   alCambiarFechaRegistro();
+  initMagneticButtons();
+}
+
+function initMagneticButtons() {
+  if (typeof gsap === 'undefined') return;
+  const magneticEls = document.querySelectorAll('button.primary, button.ghost, .avatar-btn');
+  magneticEls.forEach(el => {
+    el.addEventListener('mousemove', (e) => {
+      const rect = el.getBoundingClientRect();
+      const x = e.clientX - rect.left - rect.width / 2;
+      const y = e.clientY - rect.top - rect.height / 2;
+      
+      gsap.to(el, {
+        x: x * 0.2,
+        y: y * 0.2,
+        duration: 0.4,
+        ease: 'power2.out',
+        overwrite: 'auto'
+      });
+    });
+    
+    el.addEventListener('mouseleave', () => {
+      gsap.to(el, {
+        x: 0,
+        y: 0,
+        duration: 0.7,
+        ease: 'elastic.out(1, 0.3)',
+        overwrite: 'auto'
+      });
+    });
+  });
 }
 
 // Recarga en paralelo todos los paneles afectados tras crear, editar o borrar entradas
@@ -501,6 +547,7 @@ function cerrarSesion(){
   clearToken();
   document.getElementById('appRoot').style.display = 'none';
   document.getElementById('loginBox').style.display = 'flex';
+  initVanta();
   document.getElementById('loginUsername').value = '';
   document.getElementById('loginPassword').value = '';
   document.getElementById('loginStatus').textContent = '';
@@ -1407,6 +1454,19 @@ async function registrarEnOdoo(){
       return;
     }
 
+    // Success Animation
+    const btnTextEl = document.getElementById('btnRegistrarTexto');
+    const originalText = btnTextEl ? btnTextEl.innerHTML : 'Registrar en Odoo';
+    if(btnTextEl) btnTextEl.innerHTML = '✔️ Registrado';
+    if (typeof gsap !== 'undefined') {
+      gsap.fromTo(btn, { scale: 1 }, { scale: 1.05, duration: 0.15, yoyo: true, repeat: 1 });
+      gsap.to(btn, { backgroundColor: '#10b981', duration: 0.3 }); // Emerald Green
+    }
+    setTimeout(() => {
+      if(btnTextEl) btnTextEl.innerHTML = originalText;
+      if (typeof gsap !== 'undefined') gsap.to(btn, { backgroundColor: '', duration: 0.3, clearProps: 'backgroundColor' });
+    }, 1500);
+
     mostrarStatus('Registrado en Odoo (id ' + data.id + '). <a href="#" onclick="deshacer(' + data.id + '); return false;" style="color:var(--accent)">Deshacer</a>', 'ok');
     document.getElementById('horas').value = '';
     document.getElementById('detalle').value = '';
@@ -1472,6 +1532,19 @@ async function registrarEnLote(){
       return;
     }
   }
+
+  // Success Animation
+  const btnTextEl = document.getElementById('btnRegistrarTexto');
+  const originalText = btnTextEl ? btnTextEl.innerHTML : 'Registrar en Odoo';
+  if(btnTextEl) btnTextEl.innerHTML = '✔️ Registrado';
+  if (typeof gsap !== 'undefined') {
+    gsap.fromTo(btn, { scale: 1 }, { scale: 1.05, duration: 0.15, yoyo: true, repeat: 1 });
+    gsap.to(btn, { backgroundColor: '#10b981', duration: 0.3 });
+  }
+  setTimeout(() => {
+    if(btnTextEl) btnTextEl.innerHTML = originalText;
+    if (typeof gsap !== 'undefined') gsap.to(btn, { backgroundColor: '', duration: 0.3, clearProps: 'backgroundColor' });
+  }, 1500);
 
   mostrarStatus('Registrados ' + creados + ' días en Odoo.', 'ok');
   document.getElementById('horasLoteInput').value = '';
