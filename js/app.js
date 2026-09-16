@@ -1243,6 +1243,11 @@ async function cargarHistorial(){
     totalEl.innerHTML = 'Total <b style="color:var(--accent)">' + data.total_horas.toFixed(1) + 'h</b>';
     renderChipsDescripcion(data.lineas);
     HISTORIAL_ACTUAL = data.lineas;
+    // Autocompletado inteligente
+    const descripcionesUnicas = [...new Set(data.lineas.map(l => l.name).filter(n => n && n !== '—'))].slice(0, 7);
+    const datalist = document.getElementById('descripcionesRecientes');
+    if(datalist) datalist.innerHTML = descripcionesUnicas.map(d => `<option value="${escapeHTML(d)}">`).join('');
+
     document.getElementById('buscarHistorial').value = '';
     document.getElementById('buscarGlobalToggle').checked = false;
     document.getElementById('thSubtareaHistorial').style.display = 'none';
@@ -1358,11 +1363,27 @@ async function registrarEnOdoo(){
   mostrarStatus('Enviando a Odoo...');
 
   try{
-    const res = await api('/api/timesheet', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({tarjeta, subtarea, fecha, horas, detalle})
-    });
+    let res;
+    try {
+      res = await api('/api/timesheet', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({tarjeta, subtarea, fecha, horas, detalle})
+      });
+    } catch(e) {
+      if(e.message.includes('Failed to fetch') || !navigator.onLine) {
+        guardarEnColaOffline({
+          url: '/api/timesheet',
+          method: 'POST',
+          body: {tarjeta, subtarea, fecha, horas, detalle}
+        });
+        document.getElementById('horas').value = '';
+        document.getElementById('detalle').value = '';
+        btn.disabled = false;
+        return;
+      }
+      throw e;
+    }
     const data = await res.json();
 
     if(!res.ok || data.error){
@@ -1859,3 +1880,139 @@ function toggleLoginPassword(){
 }
 
 inicializar();
+
+// --- INLINE VALIDATION ---
+document.addEventListener('DOMContentLoaded', () => {
+  const horasInput = document.getElementById('horas');
+  const horasWarn = document.getElementById('horasWarning');
+  if(horasInput && horasWarn) {
+    horasInput.addEventListener('input', () => {
+      const v = parseFloat(horasInput.value);
+      if(v > UMBRAL_HORAS_ALTAS) {
+        horasWarn.textContent = 'Atención: > ' + UMBRAL_HORAS_ALTAS + 'h';
+        horasWarn.classList.add('visible');
+        horasInput.classList.add('input-warn');
+      } else {
+        horasWarn.classList.remove('visible');
+        horasInput.classList.remove('input-warn');
+      }
+    });
+  }
+});
+
+function clonarEntrada(id) {
+  const linea = HISTORIAL_ACTUAL.find(l => l.id === id);
+  if(!linea) return;
+  document.getElementById('subtarea').value = linea.subtarea || '';
+  document.getElementById('horas').value = linea.unit_amount;
+  document.getElementById('detalle').value = linea.name && linea.name !== '—' ? linea.name : '';
+  // Set date to today
+  const tzOffset = (new Date()).getTimezoneOffset() * 60000;
+  document.getElementById('fecha').value = (new Date(Date.now() - tzOffset)).toISOString().split('T')[0];
+  
+  mostrarTab('registrar');
+  document.getElementById('horas').dispatchEvent(new Event('input')); // trigger validation
+  mostrarToast('Entrada copiada. Revisa los datos y presiona Registrar.', 'info');
+}
+
+// Add to cargarResumen
+function dibujarSparkline(dias) {
+  const container = document.getElementById('sparklineSemana');
+  if(!container) return;
+  const hoyStr = (new Date(Date.now() - (new Date()).getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+  
+  let html = '';
+  // dias = array de 5 dias (lun-vie)
+  for(let i=0; i<5; i++){
+    const d = dias[i];
+    if(!d) {
+      html += `<div class="spark-bar" style="height: 10%" data-title="Sin datos"></div>`;
+      continue;
+    }
+    const h = d.horas;
+    const porc = Math.min(100, Math.max(10, (h / 8) * 100)); // 8h is 100% height
+    let clase = h >= 8 ? 'llena' : '';
+    if(d.fecha === hoyStr) clase += ' hoy';
+    html += `<div class="spark-bar ${clase}" style="height: ${porc}%" data-title="${d.dia_nombre}: ${h}h"></div>`;
+  }
+  container.innerHTML = html;
+}
+
+// --- MODO OFFLINE ---
+let colaOffline = JSON.parse(localStorage.getItem('registro_horas_offline') || '[]');
+
+function guardarEnColaOffline(req) {
+  colaOffline.push(req);
+  localStorage.setItem('registro_horas_offline', JSON.stringify(colaOffline));
+  mostrarToast('Sin conexión. Horas guardadas en borrador offline. Se sincronizarán al volver internet.', 'warn', 6000);
+  actualizarHudOffline();
+}
+
+function actualizarHudOffline() {
+  let hud = document.getElementById('offlineHud');
+  if(colaOffline.length > 0) {
+    if(!hud) {
+      hud = document.createElement('div');
+      hud.id = 'offlineHud';
+      hud.className = 'banner-warn';
+      hud.style.cursor = 'pointer';
+      hud.onclick = sincronizarOffline;
+      const wrap = document.querySelector('.wrap');
+      wrap.insertBefore(hud, wrap.children[1]);
+    }
+    hud.innerHTML = `⚠️ Tienes <b>${colaOffline.length}</b> registro(s) pendiente(s) de sincronizar. Toca para reintentar.`;
+    hud.style.display = 'block';
+  } else if(hud) {
+    hud.style.display = 'none';
+  }
+}
+
+async function sincronizarOffline() {
+  if(colaOffline.length === 0) return;
+  if(!navigator.onLine) {
+    mostrarToast('Sigues sin conexión a internet.', 'err');
+    return;
+  }
+  
+  mostrarToast('Sincronizando ' + colaOffline.length + ' registro(s)...', 'info');
+  const colaActual = [...colaOffline];
+  colaOffline = [];
+  localStorage.setItem('registro_horas_offline', '[]');
+  actualizarHudOffline();
+  
+  let errores = 0;
+  for(const req of colaActual) {
+    try {
+      const res = await fetch(API_BASE + req.url, {
+        method: req.method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + localStorage.getItem(TOKEN_KEY)
+        },
+        body: JSON.stringify(req.body)
+      });
+      if(!res.ok) errores++;
+    } catch(e) {
+      errores++;
+      colaOffline.push(req); // Re-queue
+    }
+  }
+  
+  if(colaOffline.length > 0) {
+    localStorage.setItem('registro_horas_offline', JSON.stringify(colaOffline));
+    actualizarHudOffline();
+  }
+  
+  if(errores > 0) {
+    mostrarToast(`Se sincronizaron algunas horas, pero ${errores} fallaron.`, 'warn');
+  } else {
+    mostrarToast('Sincronización completada con éxito.', 'ok');
+    cargarHistorial();
+    cargarResumen();
+  }
+}
+
+window.addEventListener('online', sincronizarOffline);
+document.addEventListener('DOMContentLoaded', actualizarHudOffline);
+
+// Modificar registrarEnOdoo para soportar offline

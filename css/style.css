@@ -744,3 +744,21 @@ html[data-theme="dark"] .toggle-knob{ left:16px; background:var(--sky-500); }
 }
 
 
+
+/* Validación en vivo */
+.horas-warning { font-size: 11px; color: var(--warn); opacity: 0; transition: opacity 0.2s; font-weight: 500; }
+.horas-warning.visible { opacity: 1; }
+.input-warn { border-color: var(--warn) !important; box-shadow: 0 0 0 3px var(--warn-bg) !important; }
+
+/* Sparkline */
+.sparkline { display: flex; align-items: flex-end; gap: 3px; height: 24px; margin-bottom: 4px; }
+.spark-bar { width: 8px; background: var(--track-bg); border-radius: 2px 2px 0 0; position: relative; }
+.spark-bar.llena { background: var(--sky-500); }
+.spark-bar.hoy { background: var(--ok); }
+.spark-bar:hover::after {
+  content: attr(data-title);
+  position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
+  background: var(--text-heading); color: var(--surface-panel);
+  font-size: 10px; padding: 2px 4px; border-radius: 4px; white-space: nowrap;
+  pointer-events: none; margin-bottom: 4px; z-index: 10;
+}
