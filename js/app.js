@@ -155,7 +155,7 @@ async function inicializar(){
   wireAvatarMenu();
   aplicarLabelsTema();
 
-  actualizarVisibilidadTabs();
+  mostrarTab(TAB_ACTIVA, true); // Force GSAP reveal on initial load
 
   const cargasIniciales = [
     verificarRecordatorio(),
@@ -240,10 +240,25 @@ function actualizarVisibilidadTabs(){
   });
 }
 
-function mostrarTab(nombre){
+function mostrarTab(nombre, forceAnimation = false){
+  if (TAB_ACTIVA === nombre && typeof gsap !== 'undefined' && !forceAnimation) return; // Don't animate if already on same tab
   TAB_ACTIVA = nombre;
   actualizarVisibilidadTabs();
   window.scrollTo(0, 0);
+  
+  // GSAP Modern Reveal Animation
+  if (typeof gsap !== 'undefined') {
+    const panelActivo = document.querySelector('.tab-panel:not([style*="display: none"])');
+    if (panelActivo) {
+      const elementsToAnimate = panelActivo.querySelectorAll('.card, .resumen-item, .meta-semanal, h2, label, input, select, textarea, button');
+      if (elementsToAnimate.length > 0) {
+        gsap.fromTo(elementsToAnimate, 
+          { opacity: 0, y: 15 },
+          { opacity: 1, y: 0, duration: 0.4, stagger: 0.03, ease: "power2.out", overwrite: "auto" }
+        );
+      }
+    }
+  }
 }
 
 let _intervaloBackend = null;
