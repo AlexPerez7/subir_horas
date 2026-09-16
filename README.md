@@ -2,7 +2,7 @@
 
 Herramienta personal para registrar horas de trabajo directo en Odoo (proyecto `GER_Producción Varios NF`), sin pasar por el flujo manual de anotar en Excel y después copiar uno por uno a la tarjeta correspondiente.
 
-Consiste en un formulario web estático (publicado en **GitHub Pages**) conectado a un backend propio desplegado aparte (en una **VM Linux propia**, expuesta a internet vía **Tailscale Funnel**), que habla con la API JSON-RPC de Odoo. Cada persona entra con su propio usuario y contraseña; el backend resuelve automáticamente qué tarjeta de Odoo le corresponde.
+Consiste en un formulario web estático (publicado en **GitHub Pages**) conectado a un backend propio desplegado aparte (en **Render.com**), que habla con la API JSON-RPC de Odoo. Cada persona entra con su propio usuario y contraseña; el backend resuelve automáticamente qué tarjeta de Odoo le corresponde.
 
 ---
 
@@ -14,8 +14,7 @@ Consiste en un formulario web estático (publicado en **GitHub Pages**) conectad
 - [Configurar Supabase (base de datos persistente)](#configurar-supabase-base-de-datos-persistente)
 - [Configuración inicial](#configuración-inicial)
 - [Modo desarrollo (local)](#modo-desarrollo-local)
-- [Desplegar el backend en tu propia VM](#desplegar-el-backend-en-tu-propia-vm)
-- [Deploy automático](#deploy-automático)
+- [Desplegar el backend (Render.com)](#desplegar-el-backend-rendercom)
 - [CI](#ci)
 - [Publicar el frontend en GitHub Pages](#publicar-el-frontend-en-github-pages)
 - [Instalar como app (PWA)](#instalar-como-app-pwa)
@@ -33,18 +32,18 @@ Consiste en un formulario web estático (publicado en **GitHub Pages**) conectad
 ## Arquitectura
 
 ```
-┌────────────────┐  HTTPS (fetch,   ┌───────────────┐  127.0.0.1:8000  ┌──────────────────┐   JSON-RPC   ┌──────┐
-│  index.html      │  JSON, token     │  Tailscale      │ ───────────────► │  backend_odoo.py │ ────────────► │ Odoo │
-│  (GitHub Pages)  │ ───────────────► │  Funnel /       │                  │  (Flask+gunicorn)│ ◄──────────── │      │
-│                  │ ◄─────────────── │  Render.com     │ ◄─────────────── │                  │                └──────┘
-└────────────────┘                  └───────────────┘                  └─────────┬────────┘
-                                                                                 │
-                                                                        Postgres (Supabase)
-                                                                        login / tarjeta por usuario
+┌────────────────┐  HTTPS (fetch,   ┌───────────────┐                 ┌──────────────────┐   JSON-RPC   ┌──────┐
+│  index.html    │  JSON, token     │  Render.com   │ ───────────────►│  backend_odoo.py │ ────────────►│ Odoo │
+│ (GitHub Pages) │ ───────────────► │ (Web Service) │                 │  (Flask+gunicorn)│ ◄────────────│      │
+│                │ ◄─────────────── │               │ ◄───────────────│                  │              └──────┘
+└────────────────┘                  └───────────────┘                 └─────────┬────────┘
+                                                                                │
+                                                                       Postgres (Supabase)
+                                                                       login / tarjeta por usuario
 ```
 
 - **`index.html`** — formulario standalone (HTML + CSS + JS, sin frameworks ni build step). Permite elegir tarjeta, subtarea, fecha, horas y descripción; muestra en vivo el historial real de esa subtarea en Odoo. No tiene ningún secreto embebido — solo la URL pública del backend. Se publica tal cual en GitHub Pages.
-- **`backend_odoo.py` + el paquete `backend/`** — API Flask (JSON puro) que hace de intermediaria con Odoo y gestiona el login propio de la app (usuario/contraseña, token de sesión firmado, tabla `usuarios` en Postgres). Nunca se llama a Odoo directo desde el navegador (evita exponer el token de API). Corre como servicio en Render.com o en una VM propia. Ver [Estructura del proyecto](#estructura-del-proyecto) para cómo está dividido el paquete.
+- **`backend_odoo.py` + el paquete `backend/`** — API Flask (JSON puro) que hace de intermediaria con Odoo y gestiona el login propio de la app (usuario/contraseña, token de sesión firmado, tabla `usuarios` en Postgres). Nunca se llama a Odoo directo desde el navegador (evita exponer el token de API). Corre como Web Service en Render.com. Ver [Estructura del proyecto](#estructura-del-proyecto) para cómo está dividido el paquete.
 - **`scripts/crear_usuario.py`** — CLI para crear cuentas o resetear contraseñas. Se corre desde tu máquina local, apuntando a la misma base de Supabase que usa producción (ver [Gestión de usuarios](#gestión-de-usuarios)).
 
 Como el frontend y el backend viven en dominios distintos (`*.github.io` vs backend host), la comunicación es cross-origin. La autenticación **no usa cookies**: muchos navegadores (Safari, Brave, Samsung Internet, y cada vez más) bloquean por defecto las cookies "de terceros" aunque tengan `SameSite=None; Secure`, lo que rompería el login. En cambio, `/api/login` devuelve un token firmado que el frontend guarda en `localStorage` y manda como header `Authorization: Bearer <token>` en cada pedido — no depende de ninguna política de cookies del navegador. El backend restringe CORS al origen exacto del sitio de GitHub Pages.
@@ -76,7 +75,7 @@ Además de cargar/editar/eliminar horas y ver el historial en vivo:
   ```
 - Acceso a Odoo con un usuario/token que tenga permisos de lectura/escritura sobre `project.task`, `account.analytic.line` y `hr.employee`.
 - Una cuenta de GitHub (para Pages) y una cuenta de Supabase (para la base de datos de usuarios) — ambas gratuitas.
-- Un host para el backend (Render.com, VM Linux propia, etc.).
+- Un host para el backend (Render.com).
 
 ---
 
@@ -139,122 +138,44 @@ python -m http.server 5500
 
 Y abrir `http://127.0.0.1:5500/index.html`. En `.env` local, `FRONTEND_ORIGINS` tiene que incluir `http://127.0.0.1:5500`.
 
-En `js/app.js`, cambia temporalmente `API_BASE` a `http://127.0.0.1:5000` mientras desarrollas (y vuelve a poner la URL pública de tu backend antes de publicar — la de Render.com `https://*.onrender.com` o la de tu VM vía Tailscale Funnel `https://*.ts.net`, según dónde lo tengas desplegado).
+En `js/app.js`, cambia temporalmente `API_BASE` a `http://127.0.0.1:5000` mientras desarrollas (y vuelve a poner la URL pública de tu backend en Render.com antes de publicar).
 
 Cualquier cambio en `index.html` se ve recargando la pestaña; cambios en `backend_odoo.py` requieren reiniciar el script.
 
 ---
 
-## Desplegar el backend en tu propia VM
+## Desplegar el backend (Render.com)
 
-Backend corriendo como servicio systemd en una VM Ubuntu/Debian propia (siempre encendida), expuesto a internet sin abrir puertos vía [Tailscale Funnel](https://tailscale.com/kb/1223/funnel). A diferencia de un PaaS (Render, Koyeb, etc.), acá no hay auto-deploy ni build gestionado — los pasos de clonar, actualizar e instalar dependencias los corres tú mismo por SSH/VPN a la VM.
+Backend corriendo como Web Service en Render.com (capa gratuita o de pago).
 
-**1. Preparar el código en la VM**
+**1. Crear el Web Service**
 
-```bash
-sudo apt update && sudo apt install -y python3-venv git
-git clone https://github.com/tu-usuario/subir_horas.git
-cd subir_horas
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-cp .env.example .env
-nano .env   # completa ODOO_URL, ODOO_DB, ODOO_UID, ODOO_TOKEN, SECRET_KEY,
-            # SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, FRONTEND_ORIGINS,
-            # BOOTSTRAP_ADMIN_*, etc.
-```
+En [Render.com](https://render.com), crea un nuevo **Web Service** conectado a tu repositorio de GitHub `subir_horas`.
+- **Language**: Python
+- **Build Command**: `pip install -r requirements.txt`
+- **Start Command**: `gunicorn backend_odoo:app`
 
-**2. Correrlo como servicio systemd** (para que sobreviva reinicios de la VM y se reinicie solo si crashea)
+**2. Variables de Entorno**
 
-El `ExecStart` de [`deploy/subir-horas.service`](deploy/subir-horas.service) usa `--worker-class gthread --threads 4`: gunicorn por default atiende **un solo pedido a la vez** (worker `sync`), así que si el frontend dispara varios pedidos en paralelo al cargar la página (resumen, subtareas, historial, heatmap...), se encolan y se atienden de a uno aunque el navegador los haya mandado juntos. Con un pool de threads en el mismo proceso, el backend puede atenderlos en simultáneo mientras cada uno espera su propia respuesta de Odoo por red — sigue siendo un solo proceso, así que los diccionarios en memoria (bloqueo de login, caché de Odoo) se comparten igual que antes.
+En la pestaña **Environment**, agrega las siguientes variables (los valores vienen de tu `.env` local):
+- `ODOO_URL`, `ODOO_DB`, `ODOO_UID`, `ODOO_TOKEN`
+- `SECRET_KEY`
+- `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
+- `FRONTEND_ORIGINS` (la URL de tu GitHub Pages, ej. `https://tu-usuario.github.io`)
+- `BOOTSTRAP_ADMIN_USERNAME`, `BOOTSTRAP_ADMIN_PASSWORD`, `BOOTSTRAP_ADMIN_TARJETA` (ver [Gestión de usuarios](#gestión-de-usuarios))
 
-```bash
-sudo cp deploy/subir-horas.service /etc/systemd/system/subir-horas.service
-sudo nano /etc/systemd/system/subir-horas.service   # ajusta User= y las dos rutas /ruta/a/subir_horas
-sudo systemctl daemon-reload
-sudo systemctl enable --now subir-horas
-sudo systemctl status subir-horas   # debería decir "active (running)"
-```
-
-El servicio queda escuchando solo en `127.0.0.1:8000` (no expuesto a la red local ni a internet directamente) — Tailscale Funnel es quien lo publica hacia afuera en el paso siguiente.
-
-**3. Instalar Tailscale y activar Funnel**
-
-```bash
-curl -fsSL https://tailscale.com/install.sh | sh
-sudo tailscale up   # abre un link para autenticar la VM en tu cuenta de Tailscale
-sudo tailscale funnel 8000
-```
-
-Esto último te da una URL fija tipo `https://tu-maquina.tu-tailnet.ts.net` — cópiala, la vas a necesitar en `index.html`. `tailscale funnel status` muestra el estado en cualquier momento; queda activo aunque cierres la sesión SSH (corre como daemon del sistema).
-
-**Cosas a tener en cuenta con este esquema:**
-- Sin cold starts ni sleep: al ser una VM propia siempre encendida, el backend responde igual de rápido a cualquier hora — no hace falta ningún workflow tipo "keep-warm".
-- El disco **no es efímero** (a diferencia de un PaaS free): los datos locales sobreviven reinicios de la VM. Los usuarios de todas formas viven en Postgres/Supabase (ver [Configurar Supabase](#configurar-supabase-base-de-datos-persistente)), así que esto no cambia nada del diseño.
-- Tienes acceso `sudo` completo a la VM, así que `scripts/crear_usuario.py` se puede correr directo ahí (`sudo -u CAMBIAR_USUARIO .venv/bin/python scripts/crear_usuario.py ...`) además de desde tu máquina local — igual dejamos el bootstrap por variables de entorno (`BOOTSTRAP_ADMIN_*`, ver [Gestión de usuarios](#gestión-de-usuarios)) como la forma más simple de tener el primer admin sin loguearte a la VM.
-- Actualizar el backend tras un cambio de código puede ser automático (ver [Deploy automático](#deploy-automático)) o manual: `git pull && sudo systemctl restart subir-horas` en la VM. Ver [Flujo de actualización](#flujo-de-actualización).
-- Es una VM compartida con otros usos de oficina — confirma con quien la administre que está bien correr un servicio expuesto públicamente ahí antes de activar el Funnel.
-
----
-
-## Deploy automático
-
-Por defecto, actualizar el backend es manual (`git pull && sudo systemctl restart subir-horas` en la VM, ver [Flujo de actualización](#flujo-de-actualización)). El workflow [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) lo automatiza: cada push a `main` hace ese mismo `git pull` + reinstalar dependencias + reiniciar el servicio, sin que tengas que entrar a la VM.
-
-Como la VM no tiene IP pública ni puerto entrante abierto (solo Tailscale Funnel, saliente), no puede usar un runner normal de GitHub — en cambio corre en un **runner propio** instalado en la misma VM, que se conecta hacia afuera a GitHub (igual que Tailscale) para pedir trabajo, sin necesidad de abrir nada en el firewall de la oficina.
-
-**1. Instalar el runner en la VM**
-
-En GitHub: **Settings → Actions → Runners → New self-hosted runner**, elige **Linux**, y copia/pega en la VM los comandos exactos que te muestra ahí (cambian de versión con el tiempo, por eso no se listan acá tal cual). En general es:
-
-```bash
-mkdir ~/actions-runner && cd ~/actions-runner
-curl -o actions-runner.tar.gz -L <URL que te da GitHub>
-tar xzf actions-runner.tar.gz
-./config.sh --url https://github.com/<tu-usuario>/subir_horas --token <TOKEN que te da GitHub>
-```
-
-En el paso `./config.sh`, cuando pregunte por labels/grupo, los valores por default están bien (el workflow usa `runs-on: self-hosted`, sin label extra).
-
-**2. Correrlo como servicio** (para que sobreviva reinicios de la VM, igual que `subir-horas`)
-
-```bash
-sudo ./svc.sh install
-sudo ./svc.sh start
-sudo ./svc.sh status   # debería decir "active (running)"
-```
-
-**3. Permitir que el runner reinicie el servicio sin pedir contraseña**
-
-El runner corre con el mismo usuario del sistema con el que lo configuraste (normalmente el mismo que usa `subir-horas`, ver `User=` en [`deploy/subir-horas.service`](deploy/subir-horas.service)). Ese usuario necesita poder correr `systemctl restart subir-horas` sin que el workflow se quede colgado esperando una contraseña de `sudo` que nadie va a tipear:
-
-```bash
-sudo visudo -f /etc/sudoers.d/subir-horas-deploy
-```
-
-Agrega esta línea (cambia `administrator` por el usuario real que corre el runner):
-
-```
-administrator ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart subir-horas
-```
-
-Guarda y sal (`visudo` valida la sintaxis solo; si hay un error de tipeo, avisa y no guarda — evita dejar `sudoers` roto). Esta regla es **acotada a un solo comando**, no da `sudo` general al usuario del runner.
-
-**4. Probar**
-
-Commitea y pushea cualquier cambio a `main` (o **Actions → Deploy automático a la VM → Run workflow**). Debería aparecer una corrida usando tu runner (lo identifica por nombre en vez de "GitHub-hosted"), y terminar en verde. Si falla, revisa los logs del job — suele ser el sudoers mal cargado o una ruta distinta a `~/subir_horas`.
-
-**Nota de seguridad:** un runner self-hosted en un repo público es sensible en general (cualquiera podría, en teoría, mandar un PR que corra código arbitrario en tu runner) — pero acá el trigger es solo `push` a `main` (nadie más que tú puede pushear ahí) y `workflow_dispatch`, no `pull_request`, así que un tercero no puede disparar una corrida.
+Render se encargará de instalar las dependencias y arrancar el servidor. Cada vez que hagas un push a `main`, Render automáticamente hará un nuevo deploy con tus cambios.
 
 ---
 
 ## CI
 
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) corre en cada push y pull request (en runners normales de GitHub, no en el self-hosted), con tres jobs en paralelo:
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) corre en cada push y pull request (en runners normales de GitHub), con tres jobs en paralelo:
 - **Sintaxis Python**: `python -m py_compile` sobre todos los `.py` de `backend/`, `scripts/` y `backend_odoo.py` — solo chequea sintaxis, no importa nada, así que no necesita ninguna variable de entorno.
 - **Sintaxis JS**: `node --check js/app.js`.
 - **Tests**: corre [`tests/test_horas.py`](tests/test_horas.py) con `pytest` — cubre las funciones puras de `backend/horas.py` (días hábiles, parseo de fechas del buscador, validación de horas), sin hablar con Odoo ni Supabase de verdad. [`conftest.py`](conftest.py) (en la raíz) le da a `backend/config.py` variables de entorno dummy solo para que el paquete se pueda importar en el test runner.
 
-Atrapa errores tontos (typos, paréntesis sin cerrar) y de lógica (ej. un cambio que rompa el cálculo de "día hábil anterior") antes de que un push dispare el deploy automático a la VM. No cubre el resto del backend (rutas, Odoo, Supabase) — eso requeriría mockear esas dependencias, con más esfuerzo y menos beneficio inmediato.
+Atrapa errores tontos (typos, paréntesis sin cerrar) y de lógica (ej. un cambio que rompa el cálculo de "día hábil anterior") antes de que un push dispare el deploy automático en Render.com. No cubre el resto del backend (rutas, Odoo, Supabase) — eso requeriría mockear esas dependencias, con más esfuerzo y menos beneficio inmediato.
 
 ---
 
@@ -296,9 +217,9 @@ Por detrás usa los endpoints `GET/POST /api/usuarios`, `POST /api/usuarios/<use
 
 Debajo del panel hay una tabla de **auditoría** (`GET /api/auditoria`, también solo admin) con las últimas 50 acciones: quién creó/eliminó un usuario o reseteó una contraseña, y cuándo. Vive en Postgres (Supabase) junto con el resto de los usuarios — persistente, no se pierde en cada redeploy.
 
-### Bootstrap: el primer admin
+#### Bootstrap: el primer admin
 
-El panel necesita que ya exista al menos un admin logueado. Aunque en la VM propia sí tienes acceso `sudo` y podrías correr [`scripts/crear_usuario.py`](scripts/crear_usuario.py) a mano, es más simple resolver el primer admin con tres variables de entorno (evita tener que loguearte a la VM solo para esto):
+El panel necesita que ya exista al menos un admin logueado. Es más simple resolver el primer admin configurando tres variables de entorno en Render.com:
 
 ```
 BOOTSTRAP_ADMIN_USERNAME=tu-usuario
@@ -306,9 +227,9 @@ BOOTSTRAP_ADMIN_PASSWORD=una-contraseña-inicial
 BOOTSTRAP_ADMIN_TARJETA=Alex Perez
 ```
 
-Al arrancar, el backend se fija si ya existe un usuario con ese `username`; si no existe, lo crea como admin con esa contraseña y tarjeta. Si ya existe, no hace nada — no pisa una contraseña que hayas cambiado después desde el panel. Cárgalas en el `.env` de la VM y reinicia el servicio (`sudo systemctl restart subir-horas`); con eso ya puedes loguearte en el sitio de GitHub Pages y usar el panel **Usuarios** para todo lo demás.
+Al arrancar, el backend se fija si ya existe un usuario con ese `username`; si no existe, lo crea como admin con esa contraseña y tarjeta. Si ya existe, no hace nada — no pisa una contraseña que hayas cambiado después desde el panel. Cárgalas en la pestaña Environment de Render.com; con eso ya puedes loguearte en el sitio de GitHub Pages y usar el panel **Usuarios** para todo lo demás.
 
-**Déjalas cargadas permanentemente** en el `.env` de todas formas (no las borres después del primer login): con Postgres persistente no hace falta que "recreen" el admin en cada reinicio del servicio, pero siguen siendo una red de seguridad útil, por ejemplo si en algún momento se recrea el proyecto de Supabase desde cero. Ojo con un detalle: si cambias la contraseña de `BOOTSTRAP_ADMIN_USERNAME` desde el panel y **después** el usuario se borra y se vuelve a crear (por ese escenario de recrear la base desde cero), vuelve a la contraseña que esté en `BOOTSTRAP_ADMIN_PASSWORD` (no la que hayas cambiado) — si quieres que el cambio sea permanente, actualiza también la variable de entorno.
+**Déjalas cargadas permanentemente** en Render de todas formas (no las borres después del primer login): con Postgres persistente no hace falta que "recreen" el admin en cada reinicio del servicio, pero siguen siendo una red de seguridad útil, por ejemplo si en algún momento se recrea el proyecto de Supabase desde cero. Ojo con un detalle: si cambias la contraseña de `BOOTSTRAP_ADMIN_USERNAME` desde el panel y **después** el usuario se borra y se vuelve a crear (por ese escenario de recrear la base desde cero), vuelve a la contraseña que esté en `BOOTSTRAP_ADMIN_PASSWORD` (no la que hayas cambiado) — si quieres que el cambio sea permanente, actualiza también la variable de entorno.
 
 [`scripts/crear_usuario.py`](scripts/crear_usuario.py) sigue siendo una alternativa por línea de comandos, corriéndolo desde tu máquina local (con `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` en tu `.env` apuntando al mismo proyecto de Supabase que usa producción):
 
@@ -324,8 +245,8 @@ python scripts/crear_usuario.py <username> --reset-password
 | Qué cambiaste | Qué hacer |
 |---|---|
 | `index.html` (diseño, JS, comportamiento del formulario) | Commit + push a `main`. GitHub Pages lo redespliega solo en un minuto o dos. |
-| `backend/` (endpoints, lógica de Odoo, auth) | Commit + push a `main`: se actualiza automáticamente si usas Render.com (o vía `git pull` en VM). Los usuarios viven en Supabase, así que un reinicio del servicio no los borra. |
-| `.env` / variables de entorno del backend | Se editan en el panel del hosting (ej. Render.com Environment Variables) o en la VM. No requiere tocar el repo. |
+| `backend/` (endpoints, lógica de Odoo, auth) | Commit + push a `main`: Render.com lo redespliega automáticamente. Los usuarios viven en Supabase, así que un reinicio del servicio no los borra. |
+| `.env` / variables de entorno del backend | Se editan en el panel del hosting (Render.com Environment Variables). No requiere tocar el repo. |
 
 ### Subir cambios a GitHub (con GitHub Desktop)
 
@@ -356,10 +277,7 @@ subir_horas/
 ├── .github/
 │   └── workflows/
 │       ├── respaldo-supabase.yml        # backup semanal de auditoria
-│       ├── ci.yml                       # chequeo de sintaxis Python/JS en cada push/PR
-│       └── deploy.yml                   # deploy automático a VM (opcional)
-├── deploy/
-│   └── subir-horas.service # unit de systemd para correr el backend en VM
+│       └── ci.yml                       # chequeo de sintaxis Python/JS en cada push/PR
 ├── backend_odoo.py        # punto de entrada para gunicorn - solo crea la app
 ├── backend/                # paquete con toda la lógica del backend
 │   ├── __init__.py          # create_app(): registra rutas y el guard de autenticación
@@ -447,19 +365,10 @@ Revisar que `buscar_tarea_id()` esté filtrando por `parent_id.name` correctamen
 Correr `GET /api/campos?modelo=<modelo>&q=<palabra>` (como admin) para confirmar el nombre técnico real del campo en esta instancia (varios campos están personalizados vía Odoo Studio, ej. `x_studio_*`).
 
 **El navegador bloquea las llamadas al backend (error de CORS) / la página queda en negro**
-`FRONTEND_ORIGINS` en el backend no incluye el origen exacto desde el que estás sirviendo `index.html`: tiene que ser **solo protocolo + dominio** (ej. `https://tu-usuario.github.io`), sin la ruta del repo (`/subir_horas`) ni barra final — el navegador manda el header `Origin` sin la ruta, así que si la dejas puesta no matchea nunca. Revisar el `.env` en la VM y `sudo systemctl restart subir-horas`. (Si la página queda completamente en blanco/negro sin mostrar ni el login, confirma que estás en la versión más reciente de `js/app.js` — versiones viejas no manejaban este error y se quedaban sin mostrar nada).
+`FRONTEND_ORIGINS` en el backend no incluye el origen exacto desde el que estás sirviendo `index.html`: tiene que ser **solo protocolo + dominio** (ej. `https://tu-usuario.github.io`), sin la ruta del repo (`/subir_horas`) ni barra final — el navegador manda el header `Origin` sin la ruta, así que si la dejas puesta no matchea nunca. Revisar la pestaña Environment en Render.com. (Si la página queda completamente en blanco/negro sin mostrar ni el login, puede ser un error no-JSON devuelto por el backend si Render.com está caído).
 
 **Me loguea bien pero después cada request da 401 ("no autenticado")**
 El token puede haber expirado (dura `SESSION_LIFETIME_HORAS`, default 8) — vuelve a loguearte. Si pasa inmediatamente después de loguearte, revisa en las herramientas de desarrollador (Network) que el pedido a `/api/whoami` esté mandando el header `Authorization: Bearer ...` — si no lo manda, puede ser que `localStorage` esté deshabilitado o bloqueado (modo incógnito estricto, alguna extensión).
 
 **No puedo loguearme después de reiniciar el backend**
-Con Postgres en Supabase esto no debería pasar (los usuarios persisten entre reinicios del servicio). Si pasa: revisa que `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` en el `.env` de la VM sean exactamente los mismos que venías usando (un typo o apuntar a otro proyecto de Supabase por error crea/usa una base vacía). Si además tienes `BOOTSTRAP_ADMIN_*` cargadas, al menos ese admin se recrea solo — reinicia el servicio y reintenta con esas credenciales.
-
-**El backend tarda muchísimo o nunca responde (incluso `curl http://127.0.0.1:8000/` local se cuelga)**
-Si el arranque del proceso se queda colgado silenciosamente (sin error, pero tampoco responde ningún request), sospecha primero de la conexión a Supabase — con la API REST esto no debería pasar (es HTTPS/443, igual que cualquier navegación web normal), pero si por error quedó configurado algo que intenta una conexión directa a Postgres (puertos 5432/6543) en una red que bloquea esos puertos, el proceso se cuelga esperando un timeout de TCP que puede tardar minutos. Revisa `journalctl -u subir-horas -n 50 --no-pager` y confirma que `SUPABASE_URL` (no `DATABASE_URL`) esté cargada.
-
-**El servicio no arranca / `sudo systemctl status subir-horas` muestra `failed`**
-`journalctl -u subir-horas -n 50 --no-pager` muestra el error real (falta una variable de entorno obligatoria, rutas mal puestas en el `.service`, el venv no tiene las dependencias instaladas, etc.). Los errores de configuración faltante (`config.py`) salen ahí con un mensaje explícito de qué variable falta.
-
-**La URL de Tailscale Funnel no responde desde afuera**
-`sudo tailscale funnel status` confirma que el Funnel sigue activo (se desactiva si reinicias la VM y no configuraste que arranque solo — revisar `tailscale up` con las flags de persistencia, o simplemente volver a correr `sudo tailscale funnel 8000` tras un reinicio). También confirma que el servicio de systemd esté `active (running)` — Funnel solo expone lo que ya está escuchando en `127.0.0.1:8000`, no lo levanta él.
+Con Postgres en Supabase esto no debería pasar (los usuarios persisten entre reinicios del servicio). Si pasa: revisa que `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` en Render sean exactamente los mismos que venías usando (un typo o apuntar a otro proyecto de Supabase por error crea/usa una base vacía). Si además tienes `BOOTSTRAP_ADMIN_*` cargadas, al menos ese admin se recrea solo — reintenta con esas credenciales.
