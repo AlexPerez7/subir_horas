@@ -577,7 +577,17 @@ function _modalGenerico({titulo, mensaje, conInput, valorInicial, tipoInput, tex
 
     let soltarFoco = null;
     function limpiar(){
-      backdrop.style.display = 'none';
+      if (typeof gsap !== 'undefined') {
+        const modal = backdrop.querySelector('.modal');
+        if (modal) gsap.to(modal, { scale: 0.96, opacity: 0, duration: 0.2, ease: "power2.in" });
+        gsap.to(backdrop, { opacity: 0, duration: 0.2, ease: "power2.in", onComplete: () => {
+          backdrop.style.display = 'none';
+          gsap.set(backdrop, { clearProps: "all" });
+          if(modal) gsap.set(modal, { clearProps: "all" });
+        }});
+      } else {
+        backdrop.style.display = 'none';
+      }
       btnAceptar.onclick = null;
       btnCancelar.onclick = null;
       inputEl.onkeydown = null;
@@ -598,6 +608,11 @@ function _modalGenerico({titulo, mensaje, conInput, valorInicial, tipoInput, tex
     inputEl.onkeydown = e => { if(e.key === 'Enter') aceptar(); };
 
     backdrop.style.display = 'flex';
+    if (typeof gsap !== 'undefined') {
+      gsap.fromTo(backdrop, { opacity: 0 }, { opacity: 1, duration: 0.25, ease: "power2.out" });
+      const modal = backdrop.querySelector('.modal');
+      if (modal) gsap.fromTo(modal, { scale: 0.95, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.35, ease: "expo.out", delay: 0.05 });
+    }
     soltarFoco = _atraparFoco(backdrop.querySelector('.modal'), cancelar);
     setTimeout(() => (conInput ? inputEl : btnAceptar).focus(), 30);
   });
@@ -1391,6 +1406,10 @@ async function registrarEnOdoo(){
   }
 
   btn.disabled = true;
+  const btnTextEl = document.getElementById('btnRegistrarTexto');
+  const originalText = btnTextEl ? btnTextEl.innerHTML : 'Registrar en Odoo';
+  if(btnTextEl) btnTextEl.innerHTML = 'Guardando...';
+
   mostrarStatus('Enviando a Odoo...');
 
   try{
@@ -1411,6 +1430,7 @@ async function registrarEnOdoo(){
         document.getElementById('horas').value = '';
         document.getElementById('detalle').value = '';
         btn.disabled = false;
+        if(btnTextEl) btnTextEl.innerHTML = originalText;
         return;
       }
       throw e;
@@ -1420,12 +1440,11 @@ async function registrarEnOdoo(){
     if(!res.ok || data.error){
       mostrarStatus('Error: ' + escapeHTML(data.error || res.statusText), 'err');
       btn.disabled = false;
+      if(btnTextEl) btnTextEl.innerHTML = originalText;
       return;
     }
 
     // Success Animation
-    const btnTextEl = document.getElementById('btnRegistrarTexto');
-    const originalText = btnTextEl ? btnTextEl.innerHTML : 'Registrar en Odoo';
     if(btnTextEl) btnTextEl.innerHTML = '✔️ Registrado';
     if (typeof gsap !== 'undefined') {
       gsap.fromTo(btn, { scale: 0.95 }, { scale: 1, duration: 0.5, ease: "elastic.out(1, 0.4)" });
@@ -1443,6 +1462,7 @@ async function registrarEnOdoo(){
     await refrescarDatosApp();
   } catch(e){
     mostrarStatus('No se pudo conectar al backend: ' + escapeHTML(e.message), 'err');
+    if(btnTextEl) btnTextEl.innerHTML = originalText;
   } finally {
     btn.disabled = false;
   }
@@ -1476,6 +1496,10 @@ async function registrarEnLote(){
   }
 
   btn.disabled = true;
+  const btnTextEl = document.getElementById('btnRegistrarTexto');
+  const originalText = btnTextEl ? btnTextEl.innerHTML : 'Registrar en Odoo';
+  if(btnTextEl) btnTextEl.innerHTML = 'Guardando...';
+  
   let creados = 0;
 
   for(const fecha of dias){
@@ -1490,6 +1514,7 @@ async function registrarEnLote(){
       if(!res.ok || data.error){
         mostrarStatus('Se registraron ' + creados + ' de ' + dias.length + ' días. Error en ' + formatearFecha(fecha) + ': ' + escapeHTML(data.error || res.statusText), 'err');
         btn.disabled = false;
+        if(btnTextEl) btnTextEl.innerHTML = originalText;
         await refrescarDatosApp();
         return;
       }
@@ -1497,6 +1522,7 @@ async function registrarEnLote(){
     } catch(e){
       mostrarStatus('Se registraron ' + creados + ' de ' + dias.length + ' días. Se cortó la conexión: ' + escapeHTML(e.message), 'err');
       btn.disabled = false;
+      if(btnTextEl) btnTextEl.innerHTML = originalText;
       await refrescarDatosApp();
       return;
     }
