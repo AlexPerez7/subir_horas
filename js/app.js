@@ -1,4 +1,4 @@
-const API_BASE = 'https://registro-horas-backend.onrender.com';
+const API_BASE = 'https://subir-horas.onrender.com';
 const TOKEN_KEY = 'registro_horas_token';
 const ULTIMA_TARJETA_KEY = 'registro_horas_ultima_tarjeta';
 const UMBRAL_HORAS_ALTAS = 9;
@@ -20,8 +20,10 @@ function aplicarLabelsTema(){
   const dark = temaActual() === 'dark';
   const texto = dark ? 'Modo oscuro' : 'Modo claro';
   document.querySelectorAll('.toggle-label').forEach(el => { el.textContent = texto; });
+  // El sidebar es azul marino oscuro en ambos temas (Assertiva Design
+  // System), asi que el isotipo siempre va en su version blanca.
   const logo = document.getElementById('sidebarLogo');
-  if(logo) logo.src = dark ? 'icons/logo/isotipo-blanco.png' : 'icons/logo/isotipo.png';
+  if(logo) logo.src = 'icons/logo/isotipo-blanco.png';
 }
 
 function alternarTema(){
@@ -93,7 +95,7 @@ function jsAttr(valor){
 async function inicializar(){
   if(!getToken()){
     document.getElementById('appRoot').style.display = 'none';
-    document.getElementById('loginBox').style.display = 'block';
+    document.getElementById('loginBox').style.display = 'flex';
     return;
   }
 
@@ -104,7 +106,7 @@ async function inicializar(){
     // Backend caído o inalcanzable: mostramos el login igual, con el
     // motivo, en vez de dejar la página en blanco.
     document.getElementById('appRoot').style.display = 'none';
-    document.getElementById('loginBox').style.display = 'block';
+    document.getElementById('loginBox').style.display = 'flex';
     const statusEl = document.getElementById('loginStatus');
     statusEl.className = 'status err';
     statusEl.textContent = 'No se pudo conectar al backend (' + e.message + '). Prueba reintentar en unos segundos.';
@@ -115,7 +117,7 @@ async function inicializar(){
       clearToken();
     }
     document.getElementById('appRoot').style.display = 'none';
-    document.getElementById('loginBox').style.display = 'block';
+    document.getElementById('loginBox').style.display = 'flex';
     const statusEl = document.getElementById('loginStatus');
     statusEl.className = 'status err';
     statusEl.textContent = res.status === 401 ? 'Sesión expirada. Vuelve a iniciar sesión.' : 'El servidor devolvió un error (' + res.status + '). Intenta de nuevo.';
@@ -483,7 +485,7 @@ function cerrarSesion(){
   // SESSION_LIFETIME_HORAS en el backend).
   clearToken();
   document.getElementById('appRoot').style.display = 'none';
-  document.getElementById('loginBox').style.display = 'block';
+  document.getElementById('loginBox').style.display = 'flex';
   document.getElementById('loginUsername').value = '';
   document.getElementById('loginPassword').value = '';
   document.getElementById('loginStatus').textContent = '';
@@ -1841,8 +1843,19 @@ function irACargarFecha(fechaIso){
   document.getElementById('subtarea').focus();
 }
 
-document.getElementById('loginPassword').addEventListener('keydown', (e) => {
-  if(e.key === 'Enter') iniciarSesion();
-});
+const _ICONO_OJO = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>';
+const _ICONO_OJO_TACHADO = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.7 5.1A10.9 10.9 0 0 1 12 5c6.5 0 10 7 10 7a17.6 17.6 0 0 1-3.3 4.2M6.6 6.6A17.6 17.6 0 0 0 2 12s3.5 7 10 7a10.7 10.7 0 0 0 5.4-1.4M9.9 9.9a3 3 0 0 0 4.2 4.2"/><path d="m2 2 20 20"/></svg>';
+
+function toggleLoginPassword(){
+  const input = document.getElementById('loginPassword');
+  const btn = document.getElementById('btnVerPass');
+  const oculto = input.type === 'password';
+  input.type = oculto ? 'text' : 'password';
+  btn.innerHTML = oculto ? _ICONO_OJO_TACHADO : _ICONO_OJO;
+  const etiqueta = oculto ? 'Ocultar contraseña' : 'Mostrar contraseña';
+  btn.setAttribute('aria-label', etiqueta);
+  btn.setAttribute('title', etiqueta);
+  input.focus();
+}
 
 inicializar();

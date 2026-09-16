@@ -51,10 +51,16 @@ usa gunicorn (ver `deploy/subir-horas.service`): crea la app acá y la
 expone como `app`.
 """
 
+import logging
+import traceback
+
 from flask import Flask, g, jsonify, request
+from werkzeug.exceptions import HTTPException
 from flask_cors import CORS
 
 from . import auth, config, db
+
+_log = logging.getLogger("registro-horas")
 
 RUTAS_PUBLICAS = ("/", "/api/login")
 
@@ -74,6 +80,18 @@ def create_app():
     app.register_blueprint(auth_bp)
     app.register_blueprint(usuarios_bp)
     app.register_blueprint(timesheet_bp)
+
+    @app.errorhandler(Exception)
+    def manejar_error(e):
+        # Los errores HTTP explícitos (abort(4xx), 404 de ruta, etc.) se
+        # devuelven tal cual. Cualquier otra excepción (un fallo de Odoo,
+        # un bug) se loguea completa en journalctl pero al cliente le
+        # llega solo un mensaje genérico - nunca el traceback ni el
+        # detalle interno de Odoo.
+        if isinstance(e, HTTPException):
+            return e
+        _log.error("Error no controlado en %s %s:\n%s", request.method, request.path, traceback.format_exc())
+        return jsonify({"error": "Error interno del servidor. Reintentá en un momento."}), 500
 
     @app.before_request
     def proteger_todo():

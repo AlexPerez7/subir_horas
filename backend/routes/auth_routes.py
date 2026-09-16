@@ -7,9 +7,19 @@ from .. import auth, config, db
 
 bp = Blueprint("auth_routes", __name__)
 
-# Bloqueo tras intentos fallidos de login, keyado por username - ver
-# auth._segundos_bloqueado y compañía.
+# Bloqueo tras intentos fallidos de login. Se lleva por username y también
+# por IP: solo por username, cualquiera podría bloquearle el login a otra
+# persona mandando contraseñas falsas con su usuario; el contador por IP
+# corta ese abuso sin castigar a la víctima. Ver auth._segundos_bloqueado
+# y compañía.
 _intentos_login = {}
+_intentos_login_ip = {}
+
+# Hash fijo contra el que comparar cuando el usuario no existe, para que
+# la respuesta tarde lo mismo que con un usuario real y no se pueda
+# distinguir "usuario inexistente" de "contraseña incorrecta" por el
+# tiempo de respuesta.
+_HASH_DUMMY = generate_password_hash("password-que-nunca-se-usa")
 
 
 @bp.route("/")
@@ -23,17 +33,24 @@ def login():
     username = data.get("username", "").strip().lower()
     password = data.get("password", "")
 
-    restante = auth._segundos_bloqueado(_intentos_login, username)
+    ip = auth.ip_cliente()
+    restante = max(
+        auth._segundos_bloqueado(_intentos_login, username),
+        auth._segundos_bloqueado(_intentos_login_ip, ip),
+    )
     if restante > 0:
         minutos = int(restante // 60) + 1
         return jsonify({"error": f"Demasiados intentos fallidos. Prueba de nuevo en {minutos} min."}), 429
 
     usuario = db.obtener_usuario(username)
-    if not usuario or not check_password_hash(usuario["password_hash"], password):
+    hash_a_comparar = usuario["password_hash"] if usuario else _HASH_DUMMY
+    if not check_password_hash(hash_a_comparar, password) or not usuario:
         auth._registrar_intento_fallido(_intentos_login, username)
+        auth._registrar_intento_fallido(_intentos_login_ip, ip)
         return jsonify({"error": "Usuario o contraseña incorrectos."}), 401
 
     auth._limpiar_intentos(_intentos_login, username)
+    auth._limpiar_intentos(_intentos_login_ip, ip)
     return jsonify({
         "ok": True,
         "token": auth.generar_token(usuario),
@@ -52,6 +69,8 @@ def cambiar_password():
     confirmar = data.get("confirmar", "")
 
     usuario = db.obtener_usuario(g.usuario["username"])
+    if not usuario:
+        return jsonify({"error": "Tu usuario ya no existe. Volvé a iniciar sesión."}), 401
     if not check_password_hash(usuario["password_hash"], actual):
         return jsonify({"error": "La contraseña actual no es correcta."}), 400
     if len(nueva) < 6:
