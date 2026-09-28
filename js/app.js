@@ -45,8 +45,18 @@ if('serviceWorker' in navigator){
   navigator.serviceWorker.register('sw.js').catch(() => { /* no bloquea el uso normal si falla */ });
 }
 
-document.getElementById('fecha').valueAsDate = new Date();
-document.getElementById('fechaConsulta').valueAsDate = new Date();
+// Fecha 'YYYY-MM-DD' en la zona horaria del navegador. No usar
+// toISOString() ni valueAsDate para esto: ambos trabajan en UTC, y en
+// Chile (UTC-3/-4) desde las ~21:00 devolvían la fecha de mañana, con lo
+// que "Hoy" registraba las horas en el día equivocado.
+function fechaLocalISO(offsetDias = 0, base){
+  const d = base ? new Date(base) : new Date();
+  d.setDate(d.getDate() + offsetDias);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+document.getElementById('fecha').value = fechaLocalISO();
+document.getElementById('fechaConsulta').value = fechaLocalISO();
 
 // Autenticación por token (no por cookie): frontend y backend viven en
 // dominios distintos, y varios navegadores (Safari, Brave, Samsung
@@ -549,6 +559,20 @@ function cerrarSesion(){
   // simplemente olvidarlo acá. Expira solo de todas formas (ver
   // SESSION_LIFETIME_HORAS en el backend).
   clearToken();
+  // Resetear el estado del usuario anterior: si un admin cerraba sesión
+  // estando en la pestaña Admin y luego entraba alguien sin permisos, esa
+  // pestaña quedaba "activa" pero oculta y la app se veía en blanco.
+  TAB_ACTIVA = 'registrar';
+  ES_ADMIN = false;
+  MI_TARJETA = '';
+  SUBTAREAS_CACHE = null;
+  SUBTAREAS_CACHE_TARJETA = null;
+  HISTORIAL_ACTUAL = [];
+  LINEAS_DIA_ACTUAL = [];
+  ULTIMA_LINEA_ELIMINADA_DIA = null;
+  ULTIMA_EDICION_DIA = null;
+  document.getElementById('banner').style.display = 'none';
+  document.getElementById('bannerExpiracion').style.display = 'none';
   document.getElementById('appRoot').style.display = 'none';
   document.getElementById('loginBox').style.display = 'flex';
   initVanta();
@@ -642,6 +666,14 @@ function _modalGenerico({titulo, mensaje, conInput, valorInicial, tipoInput, tex
     btnCancelar.onclick = cancelar;
     inputEl.onkeydown = e => { if(e.key === 'Enter') aceptar(); };
 
+    const modalEl = backdrop.querySelector('.modal');
+    if (typeof gsap !== 'undefined') {
+      // Si el modal anterior (ej. una confirmación) sigue en su animación de
+      // cierre, su onComplete ocultaría este modal recién abierto y la
+      // promesa quedaría sin resolverse.
+      gsap.killTweensOf([backdrop, modalEl]);
+      gsap.set([backdrop, modalEl], { clearProps: 'all' });
+    }
     backdrop.style.display = 'flex';
     if (typeof gsap !== 'undefined') {
       gsap.fromTo(backdrop, { opacity: 0 }, { opacity: 1, duration: 0.25, ease: "power2.out" });
@@ -722,11 +754,14 @@ async function verificarRecordatorio(){
   try{
     const res = await api('/api/recordatorio');
     const data = await res.json();
+    const banner = document.getElementById('banner');
     if(data.pendiente){
       const [y,m,d] = data.fecha.split('-');
-      const banner = document.getElementById('banner');
       banner.style.display = 'block';
       banner.textContent = 'No tienes horas registradas el ' + d + '/' + m + '/' + y + '. ¿Se te olvidó cargarlas?';
+    } else {
+      // Sin esto el aviso seguía visible después de cargar las horas faltantes.
+      banner.style.display = 'none';
     }
   } catch(e){ /* silencioso: no bloquea el uso normal si falla */ }
 }
@@ -736,10 +771,60 @@ function tarjetaActual(){
 }
 
 function setFecha(offsetDias){
-  const d = new Date();
-  d.setDate(d.getDate() + offsetDias);
-  document.getElementById('fecha').valueAsDate = d;
+  document.getElementById('fecha').value = fechaLocalISO(offsetDias);
   alCambiarFechaRegistro();
+}
+
+// Modo "rango": carga el mismo registro en cada día hábil entre dos fechas.
+// Estas funciones se habían perdido en un refactor (el checkbox y
+// registrarEnLote las seguían llamando y fallaban).
+function diasHabilesEnRango(desde, hasta){
+  const [y1, m1, d1] = desde.split('-').map(Number);
+  const [y2, m2, d2] = hasta.split('-').map(Number);
+  const cur = new Date(Date.UTC(y1, m1 - 1, d1));
+  const fin = new Date(Date.UTC(y2, m2 - 1, d2));
+  const dias = [];
+  while(cur <= fin){
+    const dow = cur.getUTCDay();
+    if(dow !== 0 && dow !== 6) dias.push(cur.toISOString().slice(0, 10));
+    cur.setUTCDate(cur.getUTCDate() + 1);
+  }
+  return dias;
+}
+
+function alternarModoLote(){
+  const activo = document.getElementById('loteToggle').checked;
+  document.getElementById('fechaUnica').style.display = activo ? 'none' : '';
+  if(activo) document.getElementById('infoHorasDia').style.display = 'none';
+  document.getElementById('fechaRango').style.display = activo ? '' : 'none';
+  document.getElementById('horasLote').style.display = activo ? '' : 'none';
+  if(activo){
+    // Prellenar con la fecha y horas del modo simple para no partir de cero.
+    const desde = document.getElementById('fechaDesde');
+    const hasta = document.getElementById('fechaHasta');
+    if(!desde.value) desde.value = document.getElementById('fecha').value || fechaLocalISO();
+    if(!hasta.value) hasta.value = desde.value;
+    const horasLote = document.getElementById('horasLoteInput');
+    if(!horasLote.value) horasLote.value = document.getElementById('horas').value;
+  } else {
+    actualizarHorasAcumuladasDia();
+  }
+  const textoEl = document.getElementById('btnRegistrarTexto');
+  if(textoEl) textoEl.textContent = activo ? 'Registrar en lote' : 'Registrar en Odoo';
+  actualizarPreviewLote();
+}
+
+function actualizarPreviewLote(){
+  const el = document.getElementById('previewLote');
+  const desde = document.getElementById('fechaDesde').value;
+  const hasta = document.getElementById('fechaHasta').value;
+  if(!desde || !hasta){ el.textContent = ''; el.className = 'status'; return; }
+  if(hasta < desde){ el.textContent = '"Hasta" debe ser igual o posterior a "Desde".'; el.className = 'status err'; return; }
+  const dias = diasHabilesEnRango(desde, hasta);
+  el.className = 'status';
+  el.textContent = dias.length === 0
+    ? 'No hay días hábiles (lun-vie) en ese rango.'
+    : dias.length + ' día' + (dias.length === 1 ? '' : 's') + ' hábil' + (dias.length === 1 ? '' : 'es') + ': ' + dias.map(formatearFecha).join(', ');
 }
 
 const FAVORITAS_KEY = 'registro_horas_descripciones_favoritas';
@@ -1313,11 +1398,11 @@ async function cargarHistorial(){
     const res = await api(url);
     const data = await res.json();
     if(data.error){
-      tbody.innerHTML = '<tr><td colspan="3" class="empty">' + escapeHTML(data.error) + '</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="4" class="empty">' + escapeHTML(data.error) + '</td></tr>';
       return;
     }
     if(data.lineas.length === 0){
-      tbody.innerHTML = '<tr><td colspan="3" class="empty">Sin registros todavía en esta subtarea.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="4" class="empty">Sin registros todavía en esta subtarea.</td></tr>';
     } else {
       renderFilasHistorial(data.lineas);
     }
@@ -1333,7 +1418,7 @@ async function cargarHistorial(){
     document.getElementById('buscarGlobalToggle').checked = false;
     document.getElementById('thSubtareaHistorial').style.display = 'none';
   } catch(e){
-    tbody.innerHTML = '<tr><td colspan="3" class="empty">Error cargando historial.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="4" class="empty">Error cargando historial.</td></tr>';
   }
 }
 
@@ -1365,7 +1450,7 @@ function filtrarHistorial(){
     (l.name || '').toLowerCase().includes(q) || formatearFecha(l.date).includes(q)
   );
   if(filtradas.length === 0){
-    document.getElementById('tbodyOdoo').innerHTML = '<tr><td colspan="3" class="empty">Sin coincidencias.</td></tr>';
+    document.getElementById('tbodyOdoo').innerHTML = '<tr><td colspan="4" class="empty">Sin coincidencias.</td></tr>';
   } else {
     renderFilasHistorial(filtradas);
   }
@@ -1419,6 +1504,13 @@ async function buscarHistorialGlobal(){
   }
 }
 
+// El select queda deshabilitado mientras carga o si falló la carga; en
+// esos casos su valor es un texto como "Cargando..." y no una subtarea real.
+function subtareaValida(){
+  const sel = document.getElementById('subtarea');
+  return !!sel.value && !sel.disabled;
+}
+
 async function registrarEnOdoo(){
   if(document.getElementById('loteToggle').checked){
     return registrarEnLote();
@@ -1431,6 +1523,10 @@ async function registrarEnOdoo(){
   const detalle = document.getElementById('detalle').value.trim();
   const btn = document.getElementById('btnRegistrar');
 
+  if(!subtareaValida()){
+    mostrarStatus('Elige una subtarea válida antes de registrar.', 'err');
+    return;
+  }
   if(!fecha || !horas || horas <= 0){
     mostrarStatus('Completa fecha y horas (> 0) antes de registrar.', 'err');
     return;
@@ -1456,7 +1552,10 @@ async function registrarEnOdoo(){
         body: JSON.stringify({tarjeta, subtarea, fecha, horas, detalle})
       });
     } catch(e) {
-      if(e.message.includes('Failed to fetch') || !navigator.onLine) {
+      // fetch lanza TypeError ante un fallo de red; el texto varía por
+      // navegador ("Failed to fetch" en Chrome, "Load failed" en Safari,
+      // "NetworkError..." en Firefox), así que no se compara el mensaje.
+      if(e instanceof TypeError || !navigator.onLine) {
         guardarEnColaOffline({
           url: '/api/timesheet',
           method: 'POST',
@@ -1512,6 +1611,10 @@ async function registrarEnLote(){
   const detalle = document.getElementById('detalle').value.trim();
   const btn = document.getElementById('btnRegistrar');
 
+  if(!subtareaValida()){
+    mostrarStatus('Elige una subtarea válida antes de registrar.', 'err');
+    return;
+  }
   if(!desde || !hasta || hasta < desde){
     mostrarStatus('Completa un rango de fechas válido (Desde ≤ Hasta).', 'err');
     return;
@@ -1774,18 +1877,14 @@ function clonarRegistro(subtarea, horas, detalle){
 }
 
 function setFechaConsulta(offsetDias){
-  const d = new Date();
-  d.setDate(d.getDate() + offsetDias);
-  const iso = d.toISOString().slice(0, 10);
-  document.getElementById('fechaConsulta').value = iso;
+  document.getElementById('fechaConsulta').value = fechaLocalISO(offsetDias);
   consultarDia();
 }
 
 function navegarDiaConsulta(offsetDias){
   const input = document.getElementById('fechaConsulta');
-  let actual = input.value ? new Date(input.value + 'T00:00:00') : new Date();
-  actual.setDate(actual.getDate() + offsetDias);
-  input.value = actual.toISOString().slice(0, 10);
+  const base = input.value ? new Date(input.value + 'T00:00:00') : undefined;
+  input.value = fechaLocalISO(offsetDias, base);
   consultarDia();
 }
 
@@ -1863,7 +1962,14 @@ async function deshacerEliminacionDia(){
 async function activarEdicion(id){
   const linea = LINEAS_DIA_ACTUAL.find(l => l.id === id);
   if(!linea) return;
-  const subtareas = await subtareasParaEditor();
+  let subtareas;
+  try{
+    subtareas = await subtareasParaEditor();
+    if(!Array.isArray(subtareas)) throw new Error('respuesta inválida');
+  } catch(e){
+    mostrarStatusDia('No se pudieron cargar las subtareas para editar: ' + escapeHTML(e.message), 'err');
+    return;
+  }
   const fila = document.getElementById('fila-dia-' + id);
 
   fila.innerHTML = `
@@ -1975,7 +2081,12 @@ async function revisarDiasFaltantes(){
 }
 
 function irACargarFecha(fechaIso){
+  // Desde la pestaña "Días" el formulario estaba oculto y el click no hacía nada.
+  mostrarTab('registrar');
+  const lote = document.getElementById('loteToggle');
+  if(lote.checked){ lote.checked = false; alternarModoLote(); }
   document.getElementById('fecha').value = fechaIso;
+  alCambiarFechaRegistro();
   document.getElementById('fecha').scrollIntoView({behavior:'smooth', block:'center'});
   document.getElementById('subtarea').focus();
 }
