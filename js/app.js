@@ -92,12 +92,28 @@ function jsAttr(valor){
   return JSON.stringify(String(valor)).replace(/"/g, '&quot;');
 }
 
+// Íconos SVG (trazo estilo Lucide) para las acciones de las tablas: se ven
+// igual en todos los sistemas operativos, a diferencia de los emojis.
+const ICONOS = {
+  copiar: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+  editar: '<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>',
+  borrar: '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+  llave: '<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  cerrar: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  alerta: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  reloj: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>'
+};
+function icono(nombre){
+  return '<svg class="ico ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICONOS[nombre] + '</svg>';
+}
+
 let vantaEffect = null;
 function initVanta() {
   if (typeof VANTA !== 'undefined' && !vantaEffect) {
     vantaEffect = VANTA.NET({
       el: "#loginBox", mouseControls: true, touchControls: true,
-      color: 0x6366f1, backgroundColor: 0x09090b, points: 12, maxDistance: 22, spacing: 18
+      color: 0x3b82f6, backgroundColor: 0x0b1b33, points: 12, maxDistance: 22, spacing: 18
     });
   }
 }
@@ -253,6 +269,23 @@ function actualizarVisibilidadTabs(){
   document.querySelectorAll('#tabbar button, .sidebar-nav button').forEach(b => {
     b.classList.toggle('activo', b.dataset.tab === TAB_ACTIVA);
   });
+  actualizarTituloPagina();
+}
+
+const TITULOS_TAB = {
+  registrar: 'Registrar horas',
+  resumen: 'Resumen',
+  dias: 'Días pendientes',
+  admin: 'Administración',
+};
+
+function actualizarTituloPagina(){
+  const titulo = document.getElementById('tituloPagina');
+  if(titulo) titulo.textContent = TITULOS_TAB[TAB_ACTIVA] || 'Registro de horas';
+  const sub = document.getElementById('subtituloPagina');
+  if(sub && !sub.textContent){
+    sub.textContent = new Date().toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  }
 }
 
 function mostrarTab(nombre, forceAnimation = false){
@@ -265,11 +298,13 @@ function mostrarTab(nombre, forceAnimation = false){
   if (typeof gsap !== 'undefined') {
     const panelActivo = document.querySelector('.tab-panel:not([style*="display: none"])');
     if (panelActivo) {
-      const elementsToAnimate = panelActivo.querySelectorAll('.card, .resumen-item, .meta-semanal, h2, label, input, select, textarea, button');
+      // Solo los bloques grandes: animar cada label/input por separado
+      // generaba un efecto "cascada" demasiado cargado.
+      const elementsToAnimate = panelActivo.querySelectorAll('.card, .resumen-item');
       if (elementsToAnimate.length > 0) {
         gsap.fromTo(elementsToAnimate, 
-          { opacity: 0, y: 15 },
-          { opacity: 1, y: 0, duration: 0.4, stagger: 0.03, ease: "expo.out", overwrite: "auto" }
+          { opacity: 0, y: 8 },
+          { opacity: 1, y: 0, duration: 0.35, stagger: 0.04, ease: "expo.out", overwrite: "auto", clearProps: "transform" }
         );
       }
     }
@@ -862,9 +897,9 @@ async function cargarUsuarios(){
         <td class="desc">${escapeHTML(u.username)}</td>
         <td class="desc">${escapeHTML(u.tarjeta)}</td>
         <td>${u.es_admin ? '<span class="tag">admin</span>' : ''}</td>
-        <td style="white-space:nowrap;">
-          <button type="button" class="del" onclick="resetearPasswordUsuario(${jsAttr(u.username)})" title="Resetear contraseña" aria-label="Resetear contraseña">🔑</button>
-          <button type="button" class="del" onclick="eliminarUsuarioAdmin(${jsAttr(u.username)})" title="Eliminar" aria-label="Eliminar">🗑</button>
+        <td style="white-space:nowrap; text-align:right;">
+          <button type="button" class="del" onclick="resetearPasswordUsuario(${jsAttr(u.username)})" title="Resetear contraseña" aria-label="Resetear contraseña">${icono('llave')}</button>
+          <button type="button" class="del del-danger" onclick="eliminarUsuarioAdmin(${jsAttr(u.username)})" title="Eliminar" aria-label="Eliminar">${icono('borrar')}</button>
         </td>
       </tr>`).join('');
   } catch(e){
@@ -1144,7 +1179,7 @@ function guardarBorrador(){
   const ind = document.getElementById('draftIndicator');
   if(ind){
     ind.classList.add('visible');
-    ind.textContent = '💾 Borrador guardado';
+    ind.textContent = 'Borrador guardado';
   }
 }
 
@@ -1165,7 +1200,7 @@ function restaurarBorrador(){
     const ind = document.getElementById('draftIndicator');
     if(ind && (borrador.detalle || borrador.horas)){
       ind.classList.add('visible');
-      ind.textContent = '💾 Borrador restaurado';
+      ind.textContent = 'Borrador restaurado';
     }
   } catch(e){}
 }
@@ -1237,12 +1272,12 @@ async function actualizarHorasAcumuladasDia(){
 
     infoEl.style.display = 'flex';
     if(horasCargadas === 0 && horasInput === 0){
-      infoEl.innerHTML = '<span class="tag-dia-horas">0h cargadas en este día</span>';
+      infoEl.innerHTML = '<span class="tag-dia-horas">' + icono('reloj') + ' 0h cargadas en este día</span>';
     } else if(sumaTotal > 9){
-      infoEl.innerHTML = `<span class="tag-dia-horas tag-alerta">⚠️ ${horasCargadas.toFixed(1)}h previas + ${horasInput.toFixed(1)}h = <b>${sumaTotal.toFixed(1)}h total</b></span>`;
+      infoEl.innerHTML = `<span class="tag-dia-horas tag-alerta">${icono('alerta')} ${horasCargadas.toFixed(1)}h previas + ${horasInput.toFixed(1)}h = <b>${sumaTotal.toFixed(1)}h total</b></span>`;
     } else {
       const restantes = Math.max(0, 8.5 - sumaTotal).toFixed(1);
-      infoEl.innerHTML = `<span class="tag-dia-horas">📅 ${horasCargadas.toFixed(1)}h registradas (quedan ~${restantes}h)</span>`;
+      infoEl.innerHTML = `<span class="tag-dia-horas">${icono('reloj')} ${horasCargadas.toFixed(1)}h registradas (quedan ~${restantes}h)</span>`;
     }
   } catch(e){
     infoEl.style.display = 'none';
@@ -1317,7 +1352,7 @@ function renderFilasHistorial(lineas, conSubtarea){
       <td class="hrs">${l.unit_amount.toFixed(2)}h</td>
       <td class="desc">${escapeHTML(l.name || '—')}</td>
       <td style="white-space:nowrap; text-align:right;">
-        <button type="button" class="del" onclick="clonarRegistro(${jsAttr(subtareaVal)}, ${l.unit_amount}, ${jsAttr(l.name || '')})" title="Clonar al formulario" aria-label="Clonar">📋</button>
+        <button type="button" class="del" onclick="clonarRegistro(${jsAttr(subtareaVal)}, ${l.unit_amount}, ${jsAttr(l.name || '')})" title="Clonar al formulario" aria-label="Clonar">${icono('copiar')}</button>
       </td>
     </tr>`;
   }).join('');
@@ -1445,10 +1480,10 @@ async function registrarEnOdoo(){
     }
 
     // Success Animation
-    if(btnTextEl) btnTextEl.innerHTML = '✔️ Registrado';
+    if(btnTextEl) btnTextEl.innerHTML = '✓ Registrado';
     if (typeof gsap !== 'undefined') {
       gsap.fromTo(btn, { scale: 0.95 }, { scale: 1, duration: 0.5, ease: "elastic.out(1, 0.4)" });
-      gsap.to(btn, { backgroundColor: '#10b981', duration: 0.2 }); // Emerald Green
+      gsap.to(btn, { backgroundColor: '#059669', duration: 0.2 }); // Emerald Green
     }
     setTimeout(() => {
       if(btnTextEl) btnTextEl.innerHTML = originalText;
@@ -1529,10 +1564,10 @@ async function registrarEnLote(){
   }
 
   // Success Animation
-  if(btnTextEl) btnTextEl.innerHTML = '✔️ Registrado';
+  if(btnTextEl) btnTextEl.innerHTML = '✓ Registrado';
   if (typeof gsap !== 'undefined') {
     gsap.fromTo(btn, { scale: 0.95 }, { scale: 1, duration: 0.5, ease: "elastic.out(1, 0.4)" });
-    gsap.to(btn, { backgroundColor: '#10b981', duration: 0.2 });
+    gsap.to(btn, { backgroundColor: '#059669', duration: 0.2 });
   }
   setTimeout(() => {
     if(btnTextEl) btnTextEl.innerHTML = originalText;
@@ -1712,9 +1747,9 @@ function renderTablaDia(){
       <td class="hrs">${l.horas.toFixed(2)}h</td>
       <td class="desc">${escapeHTML(l.descripcion || '—')}</td>
       <td style="white-space:nowrap; text-align:right;">
-        <button type="button" class="del" onclick="clonarRegistro(${jsAttr(l.subtarea)}, ${l.horas}, ${jsAttr(l.descripcion || '')})" title="Clonar al formulario" aria-label="Clonar">📋</button>
-        <button type="button" class="del" style="color:var(--text-dim);" onclick="activarEdicion(${l.id})" title="Editar" aria-label="Editar">✎</button>
-        <button type="button" class="del" onclick="eliminarLineaDia(${l.id})" title="Eliminar" aria-label="Eliminar">🗑</button>
+        <button type="button" class="del" onclick="clonarRegistro(${jsAttr(l.subtarea)}, ${l.horas}, ${jsAttr(l.descripcion || '')})" title="Clonar al formulario" aria-label="Clonar">${icono('copiar')}</button>
+        <button type="button" class="del" onclick="activarEdicion(${l.id})" title="Editar" aria-label="Editar">${icono('editar')}</button>
+        <button type="button" class="del del-danger" onclick="eliminarLineaDia(${l.id})" title="Eliminar" aria-label="Eliminar">${icono('borrar')}</button>
       </td>
     </tr>`).join('');
 }
@@ -1839,9 +1874,9 @@ async function activarEdicion(id){
     </td>
     <td><input type="number" id="edit-horas-${id}" value="${linea.horas}" step="0.25" min="0.25" style="font-size:12.5px; padding:5px 6px;"></td>
     <td><input type="text" id="edit-detalle-${id}" value="${escapeHTML(linea.descripcion || '')}" style="font-size:12.5px; padding:5px 6px;"></td>
-    <td style="white-space:nowrap;">
-      <button type="button" class="del" style="color:var(--ok);" onclick="guardarEdicion(${id})" title="Guardar" aria-label="Guardar">✓</button>
-      <button type="button" class="del" onclick="renderTablaDia()" title="Cancelar" aria-label="Cancelar edición">✕</button>
+    <td style="white-space:nowrap; text-align:right;">
+      <button type="button" class="del" style="color:var(--ok);" onclick="guardarEdicion(${id})" title="Guardar" aria-label="Guardar">${icono('check')}</button>
+      <button type="button" class="del" onclick="renderTablaDia()" title="Cancelar" aria-label="Cancelar edición">${icono('cerrar')}</button>
     </td>`;
 }
 

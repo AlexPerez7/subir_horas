@@ -6,13 +6,13 @@
 <title>Registro de horas · Odoo</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=20260901d">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css?v=20260928a">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="favicon.ico" sizes="any">
 <link rel="icon" href="icons/icon-32.png" type="image/png" sizes="32x32">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
-<meta name="theme-color" content="#09090b">
+<meta name="theme-color" content="#0b1b33">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <script>
@@ -31,7 +31,7 @@
 <div id="loginBox" class="login-page" style="display:none;">
   <div class="login-card">
     <div class="login-brand">
-      <img class="login-logo" src="icons/logo/isotipo.png" alt="Assertiva">
+      <img class="login-logo" src="icons/logo/isotipo-blanco.png" alt="Assertiva">
       <span class="eyebrow">GER_Produccion Varios NF</span>
     </div>
     <h1>Registro de horas</h1>
@@ -51,6 +51,7 @@
       <button class="primary" id="btnLogin" type="submit">Ingresar</button>
       <div class="status" id="loginStatus" aria-live="polite"></div>
     </form>
+    <div class="login-foot">Assertiva S.A. · Risk Advisory</div>
   </div>
 </div>
 
@@ -59,22 +60,23 @@
   <div class="sidebar-brand">
     <img class="sidebar-logo" id="sidebarLogo" src="icons/logo/isotipo-blanco.png" alt="Assertiva">
     <div>
-      <span class="eyebrow">GER_Produccion Varios NF</span>
       <h1>Registro de horas</h1>
+      <span class="eyebrow" title="GER_Produccion Varios NF">GER_Produccion Varios NF</span>
     </div>
   </div>
   <div class="sidebar-nav">
+    <div class="sidebar-nav-label">Menú</div>
     <button type="button" data-tab="registrar" onclick="mostrarTab('registrar')">
-      <span class="tabbar-icono">📝</span><span>Registrar</span>
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.4 2.6a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg><span>Registrar</span>
     </button>
     <button type="button" data-tab="resumen" onclick="mostrarTab('resumen')">
-      <span class="tabbar-icono">📊</span><span>Resumen</span>
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg><span>Resumen</span>
     </button>
     <button type="button" data-tab="dias" onclick="mostrarTab('dias')">
-      <span class="tabbar-icono">📅</span><span>Días</span>
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></svg><span>Días</span>
     </button>
     <button type="button" data-tab="admin" id="sidebarAdminBtn" onclick="mostrarTab('admin')" style="display:none;">
-      <span class="tabbar-icono">⚙️</span><span>Admin</span>
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span>Admin</span>
     </button>
   </div>
   <div class="sidebar-footer">
@@ -87,9 +89,9 @@
 </nav>
 <div class="wrap">
   <header>
-    <div class="header-brand">
-      <span class="eyebrow">GER_Produccion Varios NF</span>
-      <h1>Registro de horas</h1>
+    <div class="page-title">
+      <h1 id="tituloPagina">Registrar horas</h1>
+      <p id="subtituloPagina"></p>
     </div>
     <div class="acc-side">
       <span class="estado-backend estado-conectando" id="estadoBackend"><span class="punto"></span>Conectando...</span>
@@ -101,32 +103,46 @@
   <div id="bannerExpiracion" class="banner-warn" aria-live="polite" style="display:none;"></div>
 
   <div id="tabResumen" class="tab-panel">
+    <div class="reporte-bar">
+      <button type="button" class="ghost btn-auto btn-sm" onclick="imprimirReporte()">
+        <svg class="ico ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        Imprimir / Guardar PDF
+      </button>
+    </div>
+
     <div class="resumen">
       <div class="resumen-item">
-        <span class="resumen-valor" id="resumenSemana">—</span>
-        <span class="resumen-label">esta semana</span>
+        <span class="kpi-icon"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></span>
+        <div>
+          <span class="resumen-label">Esta semana</span>
+          <span class="resumen-valor" id="resumenSemana">—</span>
+        </div>
       </div>
       <div class="resumen-item">
-        <span class="resumen-valor" id="resumenMes">—</span>
-        <span class="resumen-label">este mes</span>
+        <span class="kpi-icon"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></svg></span>
+        <div>
+          <span class="resumen-label">Este mes</span>
+          <span class="resumen-valor" id="resumenMes">—</span>
+        </div>
+      </div>
+      <div class="resumen-item">
+        <div class="meta-semanal" id="metaSemanal" style="flex:1; min-width:0;">
+          <div class="meta-header">
+            <span class="meta-titulo">Meta semanal</span>
+            <button type="button" class="chip chip-sky" id="metaSemanalValor" onclick="editarMetaSemanal()" title="Click para configurar o quitar la meta">Configurar meta</button>
+          </div>
+          <div class="meta-track"><div class="meta-fill" id="metaFill" style="width:0%"></div></div>
+        </div>
       </div>
     </div>
 
-    <div class="meta-semanal" id="metaSemanal">
-      <div class="meta-header">
-        <span>Meta semanal</span>
-        <button type="button" class="chip" id="metaSemanalValor" onclick="editarMetaSemanal()" title="Click para configurar o quitar la meta">Configurar meta</button>
-      </div>
-      <div class="meta-track"><div class="meta-fill" id="metaFill" style="width:0%"></div></div>
-    </div>
-
-    <div class="grid">
+    <div class="grid-2">
       <div class="card">
-        <h2>Horas por subtarea · esta semana</h2>
+        <h2>Horas por subtarea <span class="h2-sub">· esta semana</span></h2>
         <div id="graficoSubtareas"><p class="empty">Sin horas cargadas esta semana todavía.</p></div>
       </div>
       <div class="card">
-        <h2>Actividad · últimos 30 días</h2>
+        <h2>Actividad <span class="h2-sub">· últimos 30 días</span></h2>
         <div id="heatmapDias" class="heatmap"></div>
         <div class="heatmap-leyenda">
           <span>Menos</span>
@@ -139,30 +155,26 @@
         </div>
       </div>
     </div>
-    <div class="reporte-bar">
-      <button type="button" class="ghost" onclick="imprimirReporte()">📄 Imprimir / Guardar Resumen en PDF</button>
-    </div>
   </div>
 
-  <div id="tabRegistrar" class="tab-panel" style="margin-top:20px;">
+  <div id="tabRegistrar" class="tab-panel">
   <div class="grid">
     <div class="col">
     <div class="card">
-      <h2>Nueva entrada</h2>
+      <div class="card-head">
+        <h2>Nueva entrada</h2>
+        <button type="button" class="btn-text" onclick="repetirUltimoRegistro(this)" title="Prellenar con tu último registro">
+          <svg class="ico ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          Repetir último
+        </button>
+      </div>
 
       <label for="tarjeta" id="labelTarjeta">Tarjeta / Persona</label>
       <select id="tarjeta"><option>Cargando...</option></select>
-      <div id="tarjetaFija" style="display:none; font-family:var(--mono); font-size:13.5px; padding:9px 10px; background:var(--surface-2); border:1px solid var(--border); border-radius:6px;"></div>
+      <div id="tarjetaFija" class="tarjeta-fija" style="display:none;"></div>
 
       <label for="subtarea">Subtarea</label>
       <select id="subtarea" disabled><option>Selecciona una tarjeta primero</option></select>
-
-      <button type="button" class="ghost" style="margin-top:10px;" onclick="repetirUltimoRegistro(this)">↻ Repetir último registro</button>
-
-      <label class="lote-toggle">
-        <input type="checkbox" id="loteToggle" onchange="alternarModoLote()">
-        Cargar el mismo registro en varios días (rango)
-      </label>
 
       <div class="row2" id="fechaUnica">
         <div>
@@ -172,13 +184,13 @@
             <button type="button" class="chip" onclick="setFecha(0)">Hoy</button>
             <button type="button" class="chip" onclick="setFecha(-1)">Ayer</button>
           </div>
-          <div id="infoHorasDia" class="info-horas-dia" style="display:none;"></div>
         </div>
         <div>
           <label for="horas" style="display:flex; justify-content:space-between; align-items:center;">Horas <span id="horasWarning" class="horas-warning"></span></label>
           <input type="number" id="horas" step="0.25" min="0.25" placeholder="1.5" oninput="alCambiarHorasRegistro()">
         </div>
       </div>
+      <div id="infoHorasDia" class="info-horas-dia" style="display:none;"></div>
 
       <div class="row2" id="fechaRango" style="display:none;">
         <div>
@@ -196,37 +208,56 @@
         <div class="status" id="previewLote"></div>
       </div>
 
+      <label class="lote-toggle">
+        <input type="checkbox" id="loteToggle" onchange="alternarModoLote()">
+        Cargar el mismo registro en varios días
+      </label>
+
       <div class="desc-header">
-        <label for="detalle" style="margin:0;">Descripción</label>
+        <label for="detalle">Descripción</label>
         <button type="button" class="btn-chip-action" onclick="agregarDescripcionFavorita()">
-          <span class="btn-chip-plus">+</span> Añadir favorita
+          <span class="btn-chip-plus">+</span> Guardar como favorita
         </button>
       </div>
       <textarea id="detalle" placeholder="Ej: revisión de logs de conectores CDE, rotación de credenciales..."></textarea>
       <div class="chips" id="chipsDescripcion"></div>
 
-      <button class="primary btn-submit-with-hint" id="btnRegistrar" onclick="registrarEnOdoo()"><span id="btnRegistrarTexto">Registrar en Odoo</span> <kbd class="kbd-hint">Ctrl + ↵</kbd></button>
-      <button class="ghost" onclick="exportarCSV()">Exportar CSV (respaldo local)</button>
-      <button class="ghost" onclick="exportarExcel()">Exportar Excel (.xls)</button>
-      <div style="display:flex; justify-content:space-between; align-items:center;">
+      <button class="primary btn-lg btn-submit-with-hint" id="btnRegistrar" onclick="registrarEnOdoo()"><span id="btnRegistrarTexto">Registrar en Odoo</span> <kbd class="kbd-hint">Ctrl + ↵</kbd></button>
+      <div class="form-foot">
         <div class="status" id="status" aria-live="polite"></div>
-        <div id="draftIndicator" class="draft-indicator">💾 Borrador guardado</div>
+        <div id="draftIndicator" class="draft-indicator">Borrador guardado</div>
+      </div>
+
+      <div class="card-foot">
+        <span class="card-foot-label">Respaldo local</span>
+        <button class="ghost btn-auto btn-sm" onclick="exportarCSV()">
+          <svg class="ico ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg> CSV
+        </button>
+        <button class="ghost btn-auto btn-sm" onclick="exportarExcel()">
+          <svg class="ico ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg> Excel
+        </button>
       </div>
     </div>
     </div>
 
     <div class="col">
     <div class="card">
-      <h2>En Odoo · <span id="subtareaActual">—</span> <span class="hud" id="totalSubtarea" style="float:right"></span></h2>
-      <input type="text" id="buscarHistorial" placeholder="Buscar en descripción o fecha..." oninput="onBuscarHistorial()" style="margin-bottom:8px;">
-      <label class="lote-toggle" style="margin-bottom:12px;">
+      <div class="card-head">
+        <h2>Historial <span class="h2-sub">· <span id="subtareaActual">—</span></span></h2>
+        <span class="badge" id="totalSubtarea"></span>
+      </div>
+      <div class="input-icon">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <input type="text" id="buscarHistorial" placeholder="Buscar en descripción o fecha..." oninput="onBuscarHistorial()">
+      </div>
+      <label class="lote-toggle" style="margin:10px 0 14px;">
         <input type="checkbox" id="buscarGlobalToggle" onchange="onBuscarHistorial()">
         Buscar en todas mis subtareas
       </label>
       <div class="tabla-scroll">
         <table>
           <thead>
-            <tr><th id="thSubtareaHistorial" style="width:22%; display:none;">Subtarea</th><th style="width:16%">Fecha</th><th style="width:12%">Horas</th><th>Descripción</th><th style="width:36px"></th></tr>
+            <tr><th id="thSubtareaHistorial" style="width:22%; display:none;">Subtarea</th><th style="width:16%">Fecha</th><th style="width:12%">Horas</th><th>Descripción</th><th style="width:44px"></th></tr>
           </thead>
           <tbody id="tbodyOdoo">
             <tr><td colspan="4" class="empty">Elige una subtarea para ver su historial.</td></tr>
@@ -236,36 +267,30 @@
     </div>
 
     <div class="card">
-      <h2>Días sin cargar horas · este mes</h2>
+      <h2>Días sin cargar horas <span class="h2-sub">· este mes</span></h2>
       <div id="listaFaltantesMes"><p class="empty">Cargando...</p></div>
     </div>
 
     <div class="card">
       <h2>Ver día completo</h2>
-      <div class="row2" style="align-items:end;">
-        <div>
-          <label for="fechaConsulta">Fecha a consultar</label>
-          <input type="date" id="fechaConsulta" onchange="consultarDia()">
+      <div class="dia-toolbar">
+        <div class="segmented" role="group" aria-label="Navegar días">
+          <button type="button" onclick="navegarDiaConsulta(-1)" aria-label="Día anterior" title="Día anterior"><svg class="ico ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
+          <button type="button" onclick="setFechaConsulta(0)">Hoy</button>
+          <button type="button" onclick="setFechaConsulta(-1)">Ayer</button>
+          <button type="button" onclick="navegarDiaConsulta(1)" aria-label="Día siguiente" title="Día siguiente"><svg class="ico ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>
         </div>
-        <div>
-          <button class="primary" style="margin-top:0;" onclick="consultarDia()">Ver horas de ese día</button>
-        </div>
-      </div>
-      <div class="dia-nav-wrapper">
-        <div class="dia-nav-controles">
-          <button type="button" class="chip" onclick="navegarDiaConsulta(-1)">◀ Anterior</button>
-          <button type="button" class="chip" onclick="setFechaConsulta(0)">Hoy</button>
-          <button type="button" class="chip" onclick="setFechaConsulta(-1)">Ayer</button>
-          <button type="button" class="chip" onclick="navegarDiaConsulta(1)">Siguiente ▶</button>
-        </div>
+        <label for="fechaConsulta" style="position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0);">Fecha a consultar</label>
+        <input type="date" id="fechaConsulta" onchange="consultarDia()">
+        <button class="primary btn-auto" onclick="consultarDia()">Consultar</button>
       </div>
       <div class="tabla-scroll" style="margin-top:16px;">
         <table>
           <thead>
-            <tr><th style="width:26%">Subtarea</th><th style="width:12%">Horas</th><th>Descripción</th><th style="width:110px"></th></tr>
+            <tr><th style="width:28%">Subtarea</th><th style="width:12%">Horas</th><th>Descripción</th><th style="width:110px"></th></tr>
           </thead>
           <tbody id="tbodyDia">
-            <tr><td colspan="4" class="empty">Elige una fecha y presiona "Ver horas de ese día".</td></tr>
+            <tr><td colspan="4" class="empty">Elige una fecha para ver sus horas.</td></tr>
           </tbody>
         </table>
       </div>
@@ -277,76 +302,84 @@
 
   </div>
 
-  <div id="tabDias" class="tab-panel" style="margin-top:20px;">
-  <div class="card">
+  <div id="tabDias" class="tab-panel">
+  <div class="card" style="max-width:760px;">
     <h2>Días sin cargar horas</h2>
-    <div class="row2" style="align-items:end;">
-      <div>
+    <div class="dia-toolbar" style="align-items:flex-end;">
+      <div style="flex:0 1 260px;">
         <label for="cantidadDias">Revisar últimos N días hábiles</label>
         <input type="number" id="cantidadDias" value="10" min="1" max="60">
       </div>
-      <div>
-        <button class="primary" style="margin-top:0;" onclick="revisarDiasFaltantes()">Revisar</button>
+      <button class="primary btn-auto" onclick="revisarDiasFaltantes()">Revisar</button>
+    </div>
+    <div id="listaFaltantes" style="margin-top:16px;"></div>
+  </div>
+  </div>
+
+  <div class="tab-panel" id="panelUsuarios" style="display:none;">
+    <div class="stack">
+    <div class="grid-2">
+      <div class="card">
+        <h2>Usuarios</h2>
+        <div class="tabla-scroll">
+          <table>
+            <thead>
+              <tr><th>Usuario</th><th>Tarjeta</th><th style="width:70px">Rol</th><th style="width:80px"></th></tr>
+            </thead>
+            <tbody id="tbodyUsuarios">
+              <tr><td colspan="4" class="empty">Cargando...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Crear usuario nuevo</h2>
+        <label for="nuevoUsuarioNombre">Usuario</label>
+        <input type="text" id="nuevoUsuarioNombre" autocomplete="off">
+        <label for="nuevoUsuarioTarjeta">Tarjeta en Odoo</label>
+        <select id="nuevoUsuarioTarjeta"><option>Cargando...</option></select>
+        <label for="nuevoUsuarioPassword">Contraseña inicial</label>
+        <input type="password" id="nuevoUsuarioPassword" autocomplete="new-password">
+        <label class="lote-toggle">
+          <input type="checkbox" id="nuevoUsuarioAdmin">
+          Es administrador
+        </label>
+        <button class="primary" onclick="crearUsuarioNuevo()">Crear usuario</button>
+        <div class="status" id="usuariosStatus" aria-live="polite"></div>
       </div>
     </div>
-    <div id="listaFaltantes" style="margin-top:14px;"></div>
-  </div>
-  </div>
 
-  <div class="card tab-panel" id="panelUsuarios" style="margin-top:20px; display:none;">
-    <h2>Usuarios</h2>
-    <div class="tabla-scroll">
-      <table>
-        <thead>
-          <tr><th>Usuario</th><th>Tarjeta</th><th style="width:60px">Admin</th><th style="width:90px"></th></tr>
-        </thead>
-        <tbody id="tbodyUsuarios">
-          <tr><td colspan="4" class="empty">Cargando...</td></tr>
-        </tbody>
-      </table>
+    <div class="card">
+      <h2>Auditoría <span class="h2-sub">· últimas acciones</span></h2>
+      <div class="tabla-scroll">
+        <table>
+          <thead>
+            <tr><th style="width:22%">Fecha</th><th style="width:18%">Quién</th><th style="width:20%">Acción</th><th>Detalle</th></tr>
+          </thead>
+          <tbody id="tbodyAuditoria">
+            <tr><td colspan="4" class="empty">Cargando...</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
-
-    <h2 style="margin-top:22px;">Crear usuario nuevo</h2>
-    <label for="nuevoUsuarioNombre">Usuario</label>
-    <input type="text" id="nuevoUsuarioNombre" autocomplete="off">
-    <label for="nuevoUsuarioTarjeta">Tarjeta en Odoo</label>
-    <select id="nuevoUsuarioTarjeta"><option>Cargando...</option></select>
-    <label for="nuevoUsuarioPassword">Contraseña inicial</label>
-    <input type="password" id="nuevoUsuarioPassword" autocomplete="new-password">
-    <label style="display:flex; align-items:center; gap:8px; margin-top:14px; cursor:pointer;">
-      <input type="checkbox" id="nuevoUsuarioAdmin" style="width:auto;">
-      Es administrador
-    </label>
-    <button class="primary" onclick="crearUsuarioNuevo()">Crear usuario</button>
-    <div class="status" id="usuariosStatus" aria-live="polite"></div>
-
-    <h2 style="margin-top:22px;">Auditoría · últimas acciones</h2>
-    <div class="tabla-scroll">
-      <table>
-        <thead>
-          <tr><th style="width:22%">Fecha</th><th style="width:18%">Quién</th><th style="width:20%">Acción</th><th>Detalle</th></tr>
-        </thead>
-        <tbody id="tbodyAuditoria">
-          <tr><td colspan="4" class="empty">Cargando...</td></tr>
-        </tbody>
-      </table>
     </div>
   </div>
 </div>
 
 <nav class="tabbar" id="tabbar">
-  <button type="button" data-tab="registrar" onclick="mostrarTab('registrar')">
-    <span class="tabbar-icono">📝</span><span>Registrar</span>
-  </button>
-  <button type="button" data-tab="resumen" onclick="mostrarTab('resumen')">
-    <span class="tabbar-icono">📊</span><span>Resumen</span>
-  </button>
-  <button type="button" data-tab="dias" onclick="mostrarTab('dias')">
-    <span class="tabbar-icono">📅</span><span>Días</span>
-  </button>
-  <button type="button" data-tab="admin" id="tabbarAdminBtn" onclick="mostrarTab('admin')" style="display:none;">
-    <span class="tabbar-icono">⚙️</span><span>Admin</span>
-  </button>
+    <button type="button" data-tab="registrar" onclick="mostrarTab('registrar')">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.4 2.6a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg><span>Registrar</span>
+    </button>
+    <button type="button" data-tab="resumen" onclick="mostrarTab('resumen')">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg><span>Resumen</span>
+    </button>
+    <button type="button" data-tab="dias" onclick="mostrarTab('dias')">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></svg><span>Días</span>
+    </button>
+    <button type="button" data-tab="admin" id="tabbarAdminBtn" onclick="mostrarTab('admin')" style="display:none;">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span>Admin</span>
+    </button>
 </nav>
 </div>
 
@@ -383,6 +416,6 @@
 
 <!-- GSAP for micro-interactions and tab reveals -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
-<script src="js/app.js?v=20260901d"></script>
+<script src="js/app.js?v=20260928a"></script>
 </body>
 </html>
