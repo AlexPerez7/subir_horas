@@ -640,9 +640,12 @@ function _modalGenerico({titulo, mensaje, conInput, valorInicial, tipoInput, tex
         const modal = backdrop.querySelector('.modal');
         if (modal) gsap.to(modal, { scale: 0.96, opacity: 0, duration: 0.2, ease: "power2.in" });
         gsap.to(backdrop, { opacity: 0, duration: 0.2, ease: "power2.in", onComplete: () => {
+          // Limpiar solo lo que animó GSAP. Con clearProps "all" se borraba
+          // también el display:none y el modal volvía a aparecer, ya sin
+          // botones funcionales (había que recargar la página).
+          gsap.set(backdrop, { clearProps: "opacity" });
+          if(modal) gsap.set(modal, { clearProps: "opacity,transform" });
           backdrop.style.display = 'none';
-          gsap.set(backdrop, { clearProps: "all" });
-          if(modal) gsap.set(modal, { clearProps: "all" });
         }});
       } else {
         backdrop.style.display = 'none';
@@ -672,7 +675,8 @@ function _modalGenerico({titulo, mensaje, conInput, valorInicial, tipoInput, tex
       // cierre, su onComplete ocultaría este modal recién abierto y la
       // promesa quedaría sin resolverse.
       gsap.killTweensOf([backdrop, modalEl]);
-      gsap.set([backdrop, modalEl], { clearProps: 'all' });
+      gsap.set(backdrop, { clearProps: 'opacity' });
+      if(modalEl) gsap.set(modalEl, { clearProps: 'opacity,transform' });
     }
     backdrop.style.display = 'flex';
     if (typeof gsap !== 'undefined') {
